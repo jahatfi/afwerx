@@ -14,6 +14,28 @@ sections = [
     "Method",
     "Approach"
 ]
+
+def get_total_budget(file_name,
+                    max_value = 1250000,
+                    keyphrase="Total Dollar Amount for this Proposal"):
+    text = ''
+    threshold = "$"+str(max_value/1000000)+"M"
+    with fitz.open(file_name ) as doc:
+        for page_count, page in enumerate(doc):
+            #print(f"{page_count}".center(80,"-"))        
+            text_segs = page.getText().split('\n')
+            for seg_i, single_text in enumerate(text_segs):
+                #print(keyphrase, type(keyphrase))
+                if keyphrase.lower() in single_text.lower():
+                    #print(single_text)
+                    budget_str = text_segs[seg_i+1]
+                    print(budget_str)
+                    budget_float = float(budget_str.lstrip('$').replace(",",""))
+                    if budget_float > max_value:
+                        print(f"WARNING!  Proposed budget exceeds threshold of ${threshold}!")
+                    break
+            #print(text)    
+
 def process_ppt(file_name):
     prs = Presentation(file_name)
     for slide in prs.slides:
@@ -23,9 +45,9 @@ def process_ppt(file_name):
             title = slide.shapes[0].text
         print(title)
 
-def process_pdf(filepath):
+def process_pdf(file_name):
     text = ''
-    with fitz.open(filepath ) as doc:
+    with fitz.open(file_name ) as doc:
         for page_count, page in enumerate(doc):
             #print(f"{page_count}".center(80,"-"))            
             text = page.getText().split('\n')[0]
@@ -47,7 +69,8 @@ def main(args):
     for file_name in args.file:
         file_extension = file_name.split(".")[-1]
         if file_extension in valid_extensions:
-            target_files.add(file_name)
+            if (args.keyword and args.keyword.lower() in file_name.lower()) or not args.keyword:
+                target_files.add(file_name)
         else:
             print(f"Skipping {file_name} with extension {file_extension}")
 
@@ -58,7 +81,8 @@ def main(args):
             for file_name in files:
                 file_extension = file_name.split(".")[-1]
                 if file_extension in valid_extensions:
-                    target_files.add(root+'/'+file_name)  
+                    if (args.keyword and args.keyword.lower() in file_name.lower()) or not args.keyword:
+                        target_files.add(root+'/'+file_name)  
 
     print(f"Parsing {len(target_files)} files. This could take a few seconds.")
     # Reset the counter.  It will be incremented as each file is parsed.
@@ -68,13 +92,16 @@ def main(args):
     start = time.time()
 
     for file_name in sorted(target_files):
-        print(f"{file_name}".center(80, '-'))
+        print("-"*80)
+        print(file_name)
         file_extension = file_name.split(".")[-1]
 
         if file_extension in ppt_extensions:
             process_ppt(file_name)
         else:
             process_pdf(file_name)
+            #get_total_budget(file_name)
+
             # TODO: lowercase and compare to remaining list
     end = time.time()
     print(f"{total_files} files in {end-start} seconds")
@@ -104,7 +131,13 @@ if __name__ == "__main__":
     parser.add_argument('--directory',
                         '-d', 
                         action='append', 
-                        type=is_directory)                           
+                        type=is_directory)   
+
+    parser.add_argument('--keyword',
+                        '-k',
+                        type=str
+                        )                        
+
     args = parser.parse_args()
     pprint.pprint(args)
 
