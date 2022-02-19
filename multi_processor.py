@@ -37,39 +37,44 @@ def get_total_budget(file_name,
             #print(text)    
 
 def process_pdf_sigs(file_name):
+    """
+    Print info about digital signatures, as well as text and surrounding 
+    text containing any of the key phrases defined below
+    """
     text = ''
+    key_phrases = [
+        "DAF CUSTOMER",
+        "DAF End-User",
+        "Digitally signed by"
+    ]
+    key_regexes = [
+        "TPOC[Ss]?\)?:"
+    ]
     with fitz.open(file_name ) as doc:
+        # Iterate over every page in the doc
         for page_count, page in enumerate(doc):
-            #print(f"{page_count}".center(80,"-"))        
             text_segs = page.getText().split('\n')
+            # Iterate over every text field
             for seg_i in range(len(text_segs)):
-                single_text = text_segs[seg_i ]
-                if "Digitally signed by" in single_text:
-                #if "POC: Dr" in single_text:
+                single_text = text_segs[seg_i]
+                for key_phrase in key_phrases:
+                    if key_phrase in single_text:
+                        pprint.pprint([x for x in text_segs[seg_i-2:seg_i+5] if x.strip()])
+                        seg_i += 5
+                        break
 
-                    #print(single_text)
-                    pprint.pprint(text_segs[seg_i-2:seg_i+5])
-                    seg_i += 5
-                
-                elif "DAF CUSTOMER" in single_text:
-                    #print(single_text)
-                    #if "POC" in text_segs[seg_i+1]:
-                    pprint.pprint(text_segs[seg_i:seg_i+5])
-                    seg_i += 5
-
-                elif "DAF End-User" in single_text:
-                    #print(single_text)
-                    #if "POC" in text_segs[seg_i+1]:
-                    pprint.pprint(text_segs[seg_i:seg_i+5])
-                    seg_i += 5
-
-                elif re.search("TPOC[Ss]?\)?:", single_text):
-                    #print(single_text)
-                    #if "POC" in text_segs[seg_i+1]:
-                    pprint.pprint(text_segs[seg_i:seg_i+5])
-                    seg_i += 5
+                for regex in key_regexes:
+                    if re.search(regex, single_text):
+                        #print(single_text)
+                        #if "POC" in text_segs[seg_i+1]:
+                        pprint.pprint([x for x in text_segs[seg_i-2:seg_i+5] if x.strip()])
+                        seg_i += 5
+                        break
 
 def process_ppt(file_name):
+    """
+    Prints the title of every slide
+    """
     prs = Presentation(file_name)
     for slide in prs.slides:
         try:
@@ -79,6 +84,9 @@ def process_ppt(file_name):
         print(title)
 
 def process_pdf(file_name):
+    """
+    Prints the title of every page (intended for slides in pdf format)
+    """    
     text = ''
     with fitz.open(file_name ) as doc:
         for page_count, page in enumerate(doc):
