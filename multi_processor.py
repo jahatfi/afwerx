@@ -36,6 +36,29 @@ def get_total_budget(file_name,
                     break
             #print(text)    
 
+def process_pdf_sigs(file_name):
+    text = ''
+    with fitz.open(file_name ) as doc:
+        for page_count, page in enumerate(doc):
+            #print(f"{page_count}".center(80,"-"))        
+            text_segs = page.getText().split('\n')
+            for seg_i, single_text in enumerate(text_segs):
+                if "Digitally signed by" in single_text:
+                #if "POC: Dr" in single_text:
+
+                    #print(single_text)
+                    pprint.pprint(text_segs[seg_i-2:seg_i+4])
+                
+                elif "DAF CUSTOMER" in single_text:
+                    print(single_text)
+                    if "POC" in text_segs[seg_i+1]:
+                        print(text_segs[seg_i+1])
+                elif "DAF End-User" in single_text:
+                    print(single_text)
+                    if "POC" in text_segs[seg_i+1]:
+                        print(text_segs[seg_i+1])
+
+
 def process_ppt(file_name):
     prs = Presentation(file_name)
     for slide in prs.slides:
@@ -99,8 +122,9 @@ def main(args):
         if file_extension in ppt_extensions:
             process_ppt(file_name)
         else:
-            process_pdf(file_name)
-            #get_total_budget(file_name)
+            #process_pdf(file_name)
+            get_total_budget(file_name)
+            process_pdf_sigs(file_name)
 
             # TODO: lowercase and compare to remaining list
     end = time.time()
