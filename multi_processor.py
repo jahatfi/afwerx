@@ -42,22 +42,32 @@ def process_pdf_sigs(file_name):
         for page_count, page in enumerate(doc):
             #print(f"{page_count}".center(80,"-"))        
             text_segs = page.getText().split('\n')
-            for seg_i, single_text in enumerate(text_segs):
+            for seg_i in range(len(text_segs)):
+                single_text = text_segs[seg_i ]
                 if "Digitally signed by" in single_text:
                 #if "POC: Dr" in single_text:
 
                     #print(single_text)
-                    pprint.pprint(text_segs[seg_i-2:seg_i+4])
+                    pprint.pprint(text_segs[seg_i-2:seg_i+5])
+                    seg_i += 5
                 
                 elif "DAF CUSTOMER" in single_text:
-                    print(single_text)
-                    if "POC" in text_segs[seg_i+1]:
-                        print(text_segs[seg_i+1])
-                elif "DAF End-User" in single_text:
-                    print(single_text)
-                    if "POC" in text_segs[seg_i+1]:
-                        print(text_segs[seg_i+1])
+                    #print(single_text)
+                    #if "POC" in text_segs[seg_i+1]:
+                    pprint.pprint(text_segs[seg_i:seg_i+5])
+                    seg_i += 5
 
+                elif "DAF End-User" in single_text:
+                    #print(single_text)
+                    #if "POC" in text_segs[seg_i+1]:
+                    pprint.pprint(text_segs[seg_i:seg_i+5])
+                    seg_i += 5
+
+                elif re.search("TPOC[Ss]?\)?:", single_text):
+                    #print(single_text)
+                    #if "POC" in text_segs[seg_i+1]:
+                    pprint.pprint(text_segs[seg_i:seg_i+5])
+                    seg_i += 5
 
 def process_ppt(file_name):
     prs = Presentation(file_name)
@@ -92,8 +102,9 @@ def main(args):
     for file_name in args.file:
         file_extension = file_name.split(".")[-1]
         if file_extension in valid_extensions:
-            if (args.keyword and args.keyword.lower() in file_name.lower()) or not args.keyword:
-                target_files.add(file_name)
+            #if (args.keyword and all(x.lower in file_name for x in args.keyword)) or not args.keyword:
+            #if (args.keyword and args.keyword.lower() in file_name.lower()) or not args.keyword:
+            target_files.add(file_name)
         else:
             print(f"Skipping {file_name} with extension {file_extension}")
 
@@ -104,7 +115,9 @@ def main(args):
             for file_name in files:
                 file_extension = file_name.split(".")[-1]
                 if file_extension in valid_extensions:
-                    if (args.keyword and args.keyword.lower() in file_name.lower()) or not args.keyword:
+                    #if (args.keyword and args.keyword.lower() in file_name.lower()) or not args.keyword:
+                    if (args.keyword and all(x.lower() in file_name.lower() for x in args.keyword)) or not args.keyword:
+
                         target_files.add(root+'/'+file_name)  
 
     print(f"Parsing {len(target_files)} files. This could take a few seconds.")
@@ -159,6 +172,7 @@ if __name__ == "__main__":
 
     parser.add_argument('--keyword',
                         '-k',
+                        action='append',
                         type=str
                         )                        
 
