@@ -1,1 +1,6 @@
 python-pptx
+PyPDF2
+fitz
+pytesseract
+from pdf2image import convert_from_path
+tempfile
