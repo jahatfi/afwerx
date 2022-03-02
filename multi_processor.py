@@ -4,6 +4,7 @@ Parse AFWERX Proposals for required portions:
 2. DAF customer and end-user
 3. TPOCs
 """
+import argparse
 import os
 import pprint
 import sys
@@ -54,6 +55,30 @@ def lower_str(x):
     Converts the provided string to a lowercase string.
     """
     return x.lower()
+
+# ==============================================================================
+def process_ppt(file_name):
+    """
+    Prints the title of every slide
+    """
+    prs = Presentation(file_name)
+    for slide in prs.slides:
+        try:
+            title = slide.shapes.title.text
+        except AttributeError:
+            title = slide.shapes[0].text
+        print(title)
+# ==============================================================================
+def process_pdf_page_titles(file_name):
+    """
+    Prints the title of every page (intended for slides in pdf format)
+    """    
+    text = ''
+    with fitz.open(file_name ) as doc:
+        for page_count, page in enumerate(doc):
+            #print(f"{page_count}".center(80,"-"))            
+            text = page.getText().split('\n')[0]
+            print(text)    
 # ==============================================================================
 def get_total_budget(file_name,
                     max_value=1250000,
@@ -127,32 +152,15 @@ def ocr_pdf(file_name):
     files_to_remove = []
     pages = convert_from_path(file_name, 500)
     # Iterate through all the pages stored above
-    for page_index, page in enumerate(pages):
-
-        # Declaring filename for each page of PDF as JPG
-        # For each page, filename will be:
-        # PDF page 1 -> page_1.jpg
-        # PDF page 2 -> page_2.jpg
-        # PDF page 3 -> page_3.jpg
-        # ....
-        # PDF page n -> page_n.jpg
+    for page in pages:
         filename = "page_"+str(image_counter)+".jpg"
-
-
         # Save the image of the page in system
         page.save(filename, 'JPEG')
         files_to_remove.append(filename)
-
-        # Increment the counter to update filename
-        image_counter = image_counter + 1
-
+        image_counter += 1
     '''
     Part #2 - Recognizing text from the images using OCR
     '''
-
-    # Variable to get count of total number of pages
-    filelimit = image_counter-1
-
     # Creating a text file to write the output
     outfile = "out_text.txt"
 
@@ -161,25 +169,15 @@ def ocr_pdf(file_name):
     f = open(outfile, "a")
 
     # Iterate from 1 to total number of pages
-    for i in range(1, filelimit + 1):
-
-        # Set filename to recognize text from
-        # Again, these files will be:
-        # page_1.jpg
-        # page_2.jpg
-        # ....
-        # page_n.jpg
-        filename = "page_"+str(i)+".jpg"
-
+    for filename in files_to_remove:
         # Recognize the text as string in image using pytesserct
         text = str(((pytesseract.image_to_string(Image.open(filename)))))
         # Finally, write the processed text to the file.
         f.write(text)
-        print(f"page {i}")
+        print(f"Page {filename}")
 
         # The recognized text is stored in variable text
         # text = text.replace('-\n', '')
-
         text_segs = text.split("\n")
         text_segs = [x.strip() for x in text_segs if x]
         # Iterate over every text field
@@ -192,8 +190,8 @@ def ocr_pdf(file_name):
                     print(f"Segment {seg_i}".center(80, "*"))
                     print(single_text.strip())
                     #ocr_cleanup(f, outfile, files_to_remove)
-                    #return^[0]
-            print(text)
+                    #return[0]
+            #print(text)
 
 # ==============================================================================
 def main(args):
@@ -205,8 +203,8 @@ def main(args):
         args.directory = set()
     if not args.file:
         args.file = set()
-    for dir in args.directory:
-        dirs.append(dir)
+    for directory in args.directory:
+        dirs.append(directory)
 
     for file_name in args.file:
         file_extension = file_name.split(".")[-1]
@@ -257,7 +255,6 @@ def main(args):
 
 # ==============================================================================
 if __name__ == "__main__":
-    import argparse
 
     # Create the parser and add arguments
     parser = argparse.ArgumentParser()
