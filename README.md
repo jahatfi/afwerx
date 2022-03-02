@@ -6,10 +6,15 @@ So far it can:
 2. Parse budget line item, e.g. "Total Dollar Amount for this Proposal" in a well-formatted PDF.   
     1. Print a warning if parsed value exceeds some threshold.
 
-3. Extract Contact info:
+3. Extract Contact info (using OCR* if necessary):
     1. PDF digital Signatures
     2. DAF Customer/End-User info
     3. TPOC info
+
+### Installation (I need to test this)
+1. python modules: `pip install -r requirements.txt`  
+2. Install tesseract: Here's instructions for Windows 10: https://medium.com/quantrium-tech/installing-and-using-tesseract-4-on-windows-10-4f7930313f82
+
 
 ### Combine keywords filters (-k foo -k bar) to process only files that contain "foo" AND "bar"
 
@@ -25,3 +30,7 @@ optional arguments:
   --keyword KEYWORD, -k KEYWORD
                         Parse only filenames containing ALL of these keywords
 ```
+
+
+### References
+https://www.geeksforgeeks.org/python-reading-contents-of-pdf-using-ocr-optical-character-recognition/
