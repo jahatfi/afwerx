@@ -1,3 +1,9 @@
+"""
+Parse AFWERX Proposals for required portions:
+1. Budget within constraints
+2. DAF customer and end-user
+3. TPOCs
+"""
 import os
 import pprint
 import sys
@@ -52,11 +58,10 @@ def lower_str(x):
 def get_total_budget(file_name,
                     max_value=1250000,
                     keyphrase="Total Dollar Amount for this Proposal"):
-    text = ''
     threshold = "$"+str(max_value/1000000)+"M"
     with fitz.open(file_name ) as doc:
-        for page_count, page in enumerate(doc):
-            #print(f"{page_count}".center(80,"-"))        
+        for page in doc:
+            #print(f"{page_count}".center(80,"-"))
             text_segs = page.getText().split('\n')
             for seg_i, single_text in enumerate(text_segs):
                 #print(keyphrase, type(keyphrase))
@@ -68,25 +73,24 @@ def get_total_budget(file_name,
                     if budget_float > max_value:
                         print(f"WARNING!  Proposed budget exceeds ${threshold}!")
                     break
-            #print(text)    
+            #print(text)
 # ==============================================================================
 def process_pdf_sigs_fitz(file_name):
     """
-    Print info about digital signatures, as well as text and surrounding 
+    Print info about digital signatures, as well as text and surrounding
     text containing any of the key phrases defined below
     """
-    text = ''
     got_text = False
 
     with fitz.open(file_name) as doc:
         # Iterate over every page in the doc
-        for page_count, page in enumerate(doc):
+        for page in doc:
             text_segs = page.getText().split('\n')
             text_segs = [text.strip() for text in text_segs if text]
             if not text_segs:
                 continue
             got_text = True
-            print(text_segs)   
+            print(text_segs)
             # Iterate over every text field
             for seg_i in range(len(text_segs)):
                 single_text = text_segs[seg_i]
@@ -99,7 +103,7 @@ def process_pdf_sigs_fitz(file_name):
 
     if not got_text:
         print("Failed to get text with fitz parser")
-        
+
     return got_text
 
 # ==============================================================================
@@ -124,7 +128,7 @@ def ocr_pdf(file_name):
     pages = convert_from_path(file_name, 500)
     # Iterate through all the pages stored above
     for page_index, page in enumerate(pages):
-  
+
         # Declaring filename for each page of PDF as JPG
         # For each page, filename will be:
         # PDF page 1 -> page_1.jpg
@@ -133,32 +137,32 @@ def ocr_pdf(file_name):
         # ....
         # PDF page n -> page_n.jpg
         filename = "page_"+str(image_counter)+".jpg"
-        
-        
+
+
         # Save the image of the page in system
         page.save(filename, 'JPEG')
         files_to_remove.append(filename)
-    
+
         # Increment the counter to update filename
         image_counter = image_counter + 1
-    
+
     '''
     Part #2 - Recognizing text from the images using OCR
     '''
-        
+
     # Variable to get count of total number of pages
     filelimit = image_counter-1
-    
+
     # Creating a text file to write the output
     outfile = "out_text.txt"
-    
-    # Open the file in append mode so that 
+
+    # Open the file in append mode so that
     # All contents of all images are added to the same file
     f = open(outfile, "a")
-    
+
     # Iterate from 1 to total number of pages
     for i in range(1, filelimit + 1):
-    
+
         # Set filename to recognize text from
         # Again, these files will be:
         # page_1.jpg
@@ -166,7 +170,7 @@ def ocr_pdf(file_name):
         # ....
         # page_n.jpg
         filename = "page_"+str(i)+".jpg"
-            
+
         # Recognize the text as string in image using pytesserct
         text = str(((pytesseract.image_to_string(Image.open(filename)))))
         # Finally, write the processed text to the file.
@@ -174,7 +178,7 @@ def ocr_pdf(file_name):
         print(f"page {i}")
 
         # The recognized text is stored in variable text
-        # text = text.replace('-\n', '')    
+        # text = text.replace('-\n', '')
 
         text_segs = text.split("\n")
         text_segs = [x.strip() for x in text_segs if x]
@@ -184,36 +188,11 @@ def ocr_pdf(file_name):
             for key_phrase in key_phrases:
                 if key_phrase in single_text:
                     for x in text_segs[seg_i-2:seg_i+5]:
-                        print(x)   
+                        print(x)
                     print(f"Segment {seg_i}".center(80, "*"))
                     print(single_text.strip())
                     #ocr_cleanup(f, outfile, files_to_remove)
-                    #return
-
-    ocr_cleanup(f, outfile, files_to_remove)
-# ==============================================================================
-def process_ppt(file_name):
-    """
-    Prints the title of every slide
-    """
-    prs = Presentation(file_name)
-    for slide in prs.slides:
-        try:
-            title = slide.shapes.title.text
-        except AttributeError:
-            title = slide.shapes[0].text
-        print(title)
-# ==============================================================================
-def process_pdf_page_titles(file_name):
-    """
-    Prints the title of every page (intended for slides in pdf format)
-    """    
-    text = ''
-    with fitz.open(file_name ) as doc:
-        for page_count, page in enumerate(doc):
-            #print(f"{page_count}".center(80,"-"))   
-            # https://stackoverflow.com/questions/50682486         
-            text = page.getText().split('\n')[0]
+                    #return^[0]
             print(text)
 
 # ==============================================================================
@@ -245,7 +224,7 @@ def main(args):
                 if ((args.keyword and all(x in file_name.lower() for x in args.keyword)) or \
                     not args.keyword) and \
                     file_extension.lower() in valid_extensions:
-                    target_files.add(root+'/'+file_name)  
+                    target_files.add(root+'/'+file_name)
 
     print(f"Parsing {len(target_files)} files. This could take a few seconds.")
     # Reset the counter.  It will be incremented as each file is parsed.
@@ -261,7 +240,7 @@ def main(args):
 
         if file_extension in ppt_extensions:
             process_ppt(file_name)
-            total_files +=1 
+            total_files +=1
         else:
             #process_pdf_page_titles(file_name)
             get_total_budget(file_name)
@@ -289,29 +268,29 @@ if __name__ == "__main__":
     # open in 'write' mode and and specify encoding
     parser.add_argument('--file',
                         '-f',
-                        action='append', 
+                        action='append',
                         type=is_filename,
                         help="Files to parse.  Must be ppt/ppt/pptx")
 
     parser.add_argument('--directory',
-                        '-d', 
-                        action='append', 
+                        '-d',
+                        action='append',
                         type=is_directory,
-                        help="Directories to search for files to parse")   
+                        help="Directories to search for files to parse")
 
     parser.add_argument('--keyword',
                         '-k',
                         action='append',
                         type=lower_str,
                         help="Parse only filenames containing ALL these keywords"
-                        )                        
+                        )
 
     parser.add_argument('--ocr',
                         '-o',
                         type=str2bool,
                         default=False,
                         help="Use OCR (Slower, but can parse scanned PDFs)"
-                        )  
+                        )
 
     args = parser.parse_args()
     pprint.pprint(args)
