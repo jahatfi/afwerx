@@ -1,8 +1,13 @@
 """
 Parse AFWERX Proposals for required portions:
 1. Budget within constraints
-2. DAF customer and end-user
-3. TPOCs
+2. Proposed duration
+3. DAF customer and end-user (x2 signatures)
+4. TPOCs
+5. TODO White Paper
+6. Subcontractors cost
+7. TODO Total manpower (number of employees/workers)
+8. Travel costs
 """
 import argparse
 import os
@@ -18,8 +23,15 @@ key_phrases = [
     "DAF CUSTOMER",
     "DAF End-User",
     "Digitally signed by",
-    "TPOC"
+    "TPOC:",
+    "TPOCs:",
+    "TPOCS:"
 ]
+# ==============================================================================
+# Reference: https://stackoverflow.com/questions/50644066
+
+def pretty_print(df):
+    print(display(HTML(df.to_html().replace("\\n","<br>"))))
 # ==============================================================================
 # Reference: https://stackoverflow.com/questions/15008758/parsing-boolean-values-with-argparse
 def str2bool(this_string):
@@ -65,6 +77,80 @@ def process_pdf_page_titles(file_name):
             text = page.getText().split('\n')[0]
             print(text)    
 # ==============================================================================
+def parse_budget(file_name,
+                 max_value=1250000,
+                 keyphrase="Total Dollar Amount for this Proposal"):
+    """
+    Parse all relevant fields from budget
+    1. Budget within constraints
+    2. Proposed duration
+    3. Subcontractor Cost
+    4. TODO Total manpower (number of employees/workers)
+    5. Travel costs
+    """
+    print("*"*80)
+    print(f"Parsing budget: {file_name}")
+    headings = [
+        "Total Dollar Amount for this Proposal",
+        "Total Subcontractor Costs (TSC)",
+        "Total Direct Travel Costs (TDT)", # This may appear multiple times, add    
+        "Proposed Base Duration (in months)"    
+    ]
+    text_segs = []
+    unique_ts_costs = set()
+    ts_cost = 0
+    total_travel_cost = 0
+    total_proposal_cost = 0
+    unique_travel_costs = set()
+    result = {}
+    threshold = "$"+str(max_value/1000000)+"M"
+    with fitz.open(file_name ) as doc:
+        for page in doc:
+            #print(f"{page_count}".center(80,"-"))
+            text_segs += page.getText().split('\n')
+
+        for seg_i, single_text in enumerate(text_segs):
+            #print(single_text)
+            #print(keyphrase, type(keyphrase))
+            for heading in headings:
+                if heading.lower() in single_text.lower():
+                    if heading == "Total Dollar Amount for this Proposal":
+                        #print(single_text)
+                        budget_str = text_segs[seg_i+1]
+                        #print(budget_str)
+                        total_proposal_cost = float(budget_str.lstrip('$').replace(",",""))
+                        result[heading] = total_proposal_cost
+                        if total_proposal_cost > max_value:
+                            print(f"WARNING! Proposed budget exceeds ${threshold}!")
+                        continue
+                    # Sum the total travel costs, careful not to add restated costs
+                    elif heading == "Total Direct Travel Costs (TDT)":
+                        cost_str = text_segs[seg_i+1]
+                        cost_float = float(cost_str.lstrip('$').replace(",",""))
+                        if cost_float not in unique_travel_costs:
+                            unique_travel_costs.add(cost_float)
+                            total_travel_cost += cost_float
+                    # Sum the TSC, careful not to add restated costs
+                    elif heading == "Total Subcontractor Costs (TSC)":
+                        cost_str = text_segs[seg_i+1]
+                        cost_float = float(cost_str.lstrip('$').replace(",",""))
+                        if cost_float not in unique_travel_costs:
+                            unique_ts_costs.add(cost_float)
+                            ts_cost += cost_float
+                    
+                    elif heading == "Proposed Base Duration (in months)":
+                        result["Duration (Mo.)"] = single_text.split()[-1].strip()
+                        print(single_text)
+                    #print(text_segs[seg_i+1])
+            #print(text)     
+    print(f"Total subcontractor costs: ${ts_cost}")
+    print(f"Total travel costs ({len(unique_travel_costs)} unique): ${total_travel_cost}")
+    print(f"Total proposal cost: {budget_str}")
+
+    result["Total subcontractor costs"] = ts_cost
+    result["Total Travel Cost"] = total_travel_cost
+    return result
+# ==============================================================================
 def get_total_budget(file_name,
                      max_value=1250000,
                      keyphrase="Total Dollar Amount for this Proposal"):
@@ -84,7 +170,7 @@ def get_total_budget(file_name,
                     print(budget_str)
                     budget_float = float(budget_str.lstrip('$').replace(",",""))
                     if budget_float > max_value:
-                        print(f"WARNING!  Proposed budget exceeds ${threshold}!")
+                        print(f"WARNING! Proposed budget exceeds ${threshold}!")
                     break
             #print(text)
 # ==============================================================================
@@ -93,7 +179,9 @@ def process_pdf_sigs_fitz(file_name):
     Print info about digital signatures, as well as text and surrounding
     text containing any of the key phrases defined below
     """
+    print(file_name)
     got_text = False
+    result = defaultdict(str)
 
     with fitz.open(file_name) as doc:
         # Iterate over every page in the doc
@@ -103,21 +191,24 @@ def process_pdf_sigs_fitz(file_name):
             if not text_segs:
                 continue
             got_text = True
-            print(text_segs)
+            #print(text_segs)
             # Iterate over every text field
             for seg_i, _ in enumerate(text_segs):
                 single_text = text_segs[seg_i]
                 for key_phrase in key_phrases:
-                    if key_phrase in single_text:
-                        for x in text_segs[seg_i-2:seg_i+5]:
+                    if key_phrase.lower() in single_text.lower():
+                        print(f"Found {key_phrase}------------------------------")
+                        for x in text_segs[seg_i:seg_i+5][::2]:
+                            result[key_phrase] += x + '\n'
                             print(x)
+                        print(f"------------------------------------------")
                         seg_i += 5
                         break
 
     if not got_text:
         print("Failed to get text with fitz parser")
 
-    return got_text
+    return result
 
 # ==============================================================================
 def ocr_cleanup(open_file_handle, open_file_name, files_to_remove):
@@ -191,6 +282,8 @@ def main():
     dirs = []
     ppt_extensions = ["ppt", "pptx"]
     valid_extensions = ppt_extensions + ["pdf"]
+    all_info = defaultdict(dict)
+
     if not args.directory:
         args.directory = set()
     if not args.file:
@@ -224,8 +317,13 @@ def main():
     start = time.time()
 
     for file_name in sorted(target_files):
-        print("-"*80)
-        print(file_name)
+        #print("-"*80)
+        #print(file_name)
+
+        prop_number = re.search(r"(\d{4})", file_name)
+        if prop_number:
+            prop_number = prop_number.group(1)
+            #print(f"Proposal: {prop_number}")
         file_extension = file_name.split(".")[-1]
 
         if file_extension in ppt_extensions:
@@ -233,18 +331,27 @@ def main():
             total_files +=1
         else:
             #process_pdf_page_titles(file_name)
-            get_total_budget(file_name)
-            if not process_pdf_sigs_fitz(file_name):
-                if args.ocr:
-                    ocr_pdf(file_name)
-                else:
-                    print(f"Can't parse {file_name}; Consider enabling OCR with -o True")
+            if "all_forms" in file_name.lower():
+                all_info[prop_number].update(parse_budget(file_name))
+            #get_total_budget(file_name)
+            
+            # Try to get signatures and TPOC data from this PDF
+            sig_dict = process_pdf_sigs_fitz(file_name)
+
+            if sig_dict:
+                all_info[prop_number].update(sig_dict)
+            elif args.ocr:
+                ocr_pdf(file_name)
+            else:
+                print(f"Can't parse {file_name}; Consider enabling OCR with -o True")
+            
             total_files += 1
 
-            # TODO: lowercase and compare to remaining list
     end = time.time()
     print(f"{total_files} files in {end-start} seconds")
-
+    results = pd.DataFrame.from_dict(all_info, orient="index")
+    results.index.name = "Proposal ID"
+    pprint.pprint(results)
 # ==============================================================================
 if __name__ == "__main__":
 
@@ -284,17 +391,24 @@ if __name__ == "__main__":
     # Invocation correct; now load modules
     # Otherwise you force the user to wait for them to load, 
     # then tell them the invocation is incorrect, what a waste of time.
+    
     import pprint
     import sys
     import time
+    import re
+    import pandas as pd
+    from IPython.display import display, HTML
 
+    from collections import defaultdict
     from pptx import Presentation
 
+    from tabulate import tabulate
     import fitz
     from pdf2image import convert_from_path
     from PIL import Image
     import pytesseract
 
+    pd.set_option('display.width', 1000)
     # If you don't have tesseract executable in your PATH, include the following:
     #pytesseract.pytesseract.tesseract_cmd = r'C:\\Program Files\\Tesseract-OCR\\tesseract'
     pprint.pprint(args)
