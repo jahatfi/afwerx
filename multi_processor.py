@@ -20,12 +20,13 @@ sections = [
 ]
 
 key_phrases = [
-    "DAF CUSTOMER",
+    "DAF Customer",
     "DAF End-User",
     "Digitally signed by",
     "TPOC:",
     "TPOCs:",
-    "TPOCS:"
+    "TPOCS:",
+    "Technical Point of Contact"
 ]
 # ==============================================================================
 # Reference: https://stackoverflow.com/questions/50644066
@@ -119,7 +120,7 @@ def parse_budget(file_name,
                         budget_str = text_segs[seg_i+1]
                         #print(budget_str)
                         total_proposal_cost = float(budget_str.lstrip('$').replace(",",""))
-                        result[heading] = total_proposal_cost
+                        result["Total"] = total_proposal_cost
                         if total_proposal_cost > max_value:
                             print(f"WARNING! Proposed budget exceeds ${threshold}!")
                         continue
@@ -147,8 +148,8 @@ def parse_budget(file_name,
     print(f"Total travel costs ({len(unique_travel_costs)} unique): ${total_travel_cost}")
     print(f"Total proposal cost: {budget_str}")
 
-    result["Total subcontractor costs"] = ts_cost
-    result["Total Travel Cost"] = total_travel_cost
+    result["TSC"] = ts_cost
+    result["TTC"] = total_travel_cost
     return result
 # ==============================================================================
 def get_total_budget(file_name,
@@ -193,17 +194,34 @@ def process_pdf_sigs_fitz(file_name):
             got_text = True
             #print(text_segs)
             # Iterate over every text field
-            for seg_i, _ in enumerate(text_segs):
-                single_text = text_segs[seg_i]
+            for seg_i, single_text in enumerate(text_segs):
                 for key_phrase in key_phrases:
                     if key_phrase.lower() in single_text.lower():
-                        print(f"Found {key_phrase}------------------------------")
-                        for x in text_segs[seg_i:seg_i+5][::2]:
-                            result[key_phrase] += x + '\n'
-                            print(x)
-                        print(f"------------------------------------------")
-                        seg_i += 5
-                        break
+                        if "TPOC" in key_phrase:
+                            result[key_phrase] += single_text + "\n"
+                            print(single_text)
+
+                        elif key_phrase == "Digitally signed by":
+                            print(f"Found {key_phrase}------------------------")
+                            #for x in text_segs[seg_i:seg_i+5][::2]:
+                            for x in text_segs[seg_i+1:seg_i+3]:
+                                if ':' in x:
+                                    break
+                                result[key_phrase] += x + '\n'
+                                print(x)
+                            print(f"------------------------------------------")
+                            seg_i += 5
+                            break       
+                        
+                        else:
+
+                            #for x in text_segs[seg_i:seg_i+5][::2]:
+                            for x in text_segs[seg_i:seg_i+5]:
+                                result[key_phrase] += x + '\n'
+                                print(x)
+                            print(f"------------------------------------------")
+                            seg_i += 5
+                            break
 
     if not got_text:
         print("Failed to get text with fitz parser")
@@ -352,6 +370,7 @@ def main():
     results = pd.DataFrame.from_dict(all_info, orient="index")
     results.index.name = "Proposal ID"
     pprint.pprint(results)
+    results.to_csv("proposals.csv")
 # ==============================================================================
 if __name__ == "__main__":
 
@@ -409,6 +428,7 @@ if __name__ == "__main__":
     import pytesseract
 
     pd.set_option('display.width', 1000)
+    pd.set_option('display.max_colwidth', 1000)
     # If you don't have tesseract executable in your PATH, include the following:
     #pytesseract.pytesseract.tesseract_cmd = r'C:\\Program Files\\Tesseract-OCR\\tesseract'
     pprint.pprint(args)
