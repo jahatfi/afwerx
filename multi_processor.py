@@ -1,16 +1,17 @@
 import os
 import pprint
-import re
 import sys
 import time
+
 from pptx import Presentation
-from utils import is_directory, is_filename
-from PyPDF2 import PdfFileReader
+
 import fitz
-import tempfile
-from pdf2image import convert_from_path
 import pytesseract
+from pdf2image import convert_from_path
 from PIL import Image
+from utils import is_directory, is_filename
+
+#from PyPDF2 import PdfFileReader
 
 # If you don't have tesseract executable in your PATH, include the following:
 pytesseract.pytesseract.tesseract_cmd = r'C:\\Program Files\\Tesseract-OCR\\tesseract'
@@ -27,13 +28,29 @@ key_phrases = [
     "Digitally signed by",
     "TPOC"
 ]
-
-key_regexes = [
-    "TPOC[Ss]?\)?:"
-]
+# ==============================================================================
+# Reference: https://stackoverflow.com/questions/15008758/parsing-boolean-values-with-argparse
+def str2bool(v):
+    """
+    Validates that an argparse argument is a boolean value.
+    """
+    if isinstance(v, bool):
+        return v
+    if v.lower() in ('yes', 'true', 't', 'y', '1'):
+        return True
+    elif v.lower() in ('no', 'false', 'f', 'n', '0'):
+        return False
+    else:
+        raise argparse.ArgumentTypeError('Boolean value expected.')
+# ==============================================================================
+def lower_str(x):
+    """
+    Converts the provided string to a lowercase string.
+    """
+    return x.lower()
 # ==============================================================================
 def get_total_budget(file_name,
-                    max_value = 1250000,
+                    max_value=1250000,
                     keyphrase="Total Dollar Amount for this Proposal"):
     text = ''
     threshold = "$"+str(max_value/1000000)+"M"
@@ -49,7 +66,7 @@ def get_total_budget(file_name,
                     print(budget_str)
                     budget_float = float(budget_str.lstrip('$').replace(",",""))
                     if budget_float > max_value:
-                        print(f"WARNING!  Proposed budget exceeds threshold of ${threshold}!")
+                        print(f"WARNING!  Proposed budget exceeds ${threshold}!")
                     break
             #print(text)    
 # ==============================================================================
@@ -59,14 +76,13 @@ def process_pdf_sigs_fitz(file_name):
     text containing any of the key phrases defined below
     """
     text = ''
-
-
     got_text = False
+
     with fitz.open(file_name) as doc:
         # Iterate over every page in the doc
         for page_count, page in enumerate(doc):
             text_segs = page.getText().split('\n')
-            text_segs = [text for text in text_segs if text]
+            text_segs = [text.strip() for text in text_segs if text]
             if not text_segs:
                 continue
             got_text = True
@@ -76,15 +92,8 @@ def process_pdf_sigs_fitz(file_name):
                 single_text = text_segs[seg_i]
                 for key_phrase in key_phrases:
                     if key_phrase in single_text:
-                        pprint.pprint([x for x in text_segs[seg_i-2:seg_i+5] if x.strip()])
-                        seg_i += 5
-                        break
-
-                for regex in key_regexes:
-                    if re.search(regex, single_text):
-                        #print(single_text)
-                        #if "POC" in text_segs[seg_i+1]:
-                        pprint.pprint([x for x in text_segs[seg_i-2:seg_i+5] if x.strip()])
+                        for x in text_segs[seg_i-2:seg_i+5]:
+                            print(x)
                         seg_i += 5
                         break
 
@@ -100,8 +109,8 @@ def ocr_cleanup(open_file_handle, open_file_name, files_to_remove):
         os.remove(file_name_to_remove)
     if open_file_handle:
         open_file_handle.close()
-    if open_file_name:
-        os.remove(open_file_name)
+    #if open_file_name:
+    #    os.remove(open_file_name)
 
 # ==============================================================================
 def ocr_pdf(file_name):
@@ -114,7 +123,7 @@ def ocr_pdf(file_name):
     files_to_remove = []
     pages = convert_from_path(file_name, 500)
     # Iterate through all the pages stored above
-    for page in pages:
+    for page_index, page in enumerate(pages):
   
         # Declaring filename for each page of PDF as JPG
         # For each page, filename will be:
@@ -133,62 +142,54 @@ def ocr_pdf(file_name):
         # Increment the counter to update filename
         image_counter = image_counter + 1
     
-        '''
-        Part #2 - Recognizing text from the images using OCR
-        '''
+    '''
+    Part #2 - Recognizing text from the images using OCR
+    '''
+        
+    # Variable to get count of total number of pages
+    filelimit = image_counter-1
+    
+    # Creating a text file to write the output
+    outfile = "out_text.txt"
+    
+    # Open the file in append mode so that 
+    # All contents of all images are added to the same file
+    f = open(outfile, "a")
+    
+    # Iterate from 1 to total number of pages
+    for i in range(1, filelimit + 1):
+    
+        # Set filename to recognize text from
+        # Again, these files will be:
+        # page_1.jpg
+        # page_2.jpg
+        # ....
+        # page_n.jpg
+        filename = "page_"+str(i)+".jpg"
             
-        # Variable to get count of total number of pages
-        filelimit = image_counter-1
-        
-        # Creating a text file to write the output
-        outfile = "out_text.txt"
-        
-        # Open the file in append mode so that 
-        # All contents of all images are added to the same file
-        f = open(outfile, "a")
-        
-        # Iterate from 1 to total number of pages
-        for i in range(1, filelimit + 1):
-        
-            # Set filename to recognize text from
-            # Again, these files will be:
-            # page_1.jpg
-            # page_2.jpg
-            # ....
-            # page_n.jpg
-            filename = "page_"+str(i)+".jpg"
-                
-            # Recognize the text as string in image using pytesserct
-            text = str(((pytesseract.image_to_string(Image.open(filename)))))
-        
-            # The recognized text is stored in variable text
-            # text = text.replace('-\n', '')    
-
-            text_segs = text.split("\n")
-            # Iterate over every text field
-            for seg_i in range(len(text_segs)):
-                single_text = text_segs[seg_i]
-                for key_phrase in key_phrases:
-                    if key_phrase in single_text:
-                        pprint.pprint([x for x in text_segs[seg_i-2:seg_i+5] if x.strip()])
-                        print("*"*80)
-                        #print(single_text)
-                        ocr_cleanup(f, outfile, files_to_remove)
-                        return
-
-                for regex in key_regexes:
-                    if re.search(regex, single_text):
-                        #print(single_text)
-                        #if "POC" in text_segs[seg_i+1]:
-                        pprint.pprint([x for x in text_segs[seg_i-2:seg_i+5] if x.strip()])
-                        print("*"*80)
-
-                        #print(single_text)
-                        ocr_cleanup(f, outfile, files_to_remove)
-                        return
-
+        # Recognize the text as string in image using pytesserct
+        text = str(((pytesseract.image_to_string(Image.open(filename)))))
         # Finally, write the processed text to the file.
         f.write(text)
+        print(f"page {i}")
+
+        # The recognized text is stored in variable text
+        # text = text.replace('-\n', '')    
+
+        text_segs = text.split("\n")
+        text_segs = [x.strip() for x in text_segs if x]
+        # Iterate over every text field
+        for seg_i in range(len(text_segs)):
+            single_text = text_segs[seg_i]
+            for key_phrase in key_phrases:
+                if key_phrase in single_text:
+                    for x in text_segs[seg_i-2:seg_i+5]:
+                        print(x)   
+                    print(f"Segment {seg_i}".center(80, "*"))
+                    print(single_text.strip())
+                    #ocr_cleanup(f, outfile, files_to_remove)
+                    #return
+
     ocr_cleanup(f, outfile, files_to_remove)
 # ==============================================================================
 def process_ppt(file_name):
@@ -231,8 +232,6 @@ def main(args):
     for file_name in args.file:
         file_extension = file_name.split(".")[-1]
         if file_extension in valid_extensions:
-            #if (args.keyword and all(x.lower in file_name for x in args.keyword)) or not args.keyword:
-            #if (args.keyword and args.keyword.lower() in file_name.lower()) or not args.keyword:
             target_files.add(file_name)
         else:
             print(f"Skipping {file_name} with extension {file_extension}")
@@ -243,11 +242,10 @@ def main(args):
         for (root, _, files) in os.walk(source_dir):
             for file_name in files:
                 file_extension = file_name.split(".")[-1]
-                if file_extension in valid_extensions:
-                    #if (args.keyword and args.keyword.lower() in file_name.lower()) or not args.keyword:
-                    if (args.keyword and all(x.lower() in file_name.lower() for x in args.keyword)) or not args.keyword:
-
-                        target_files.add(root+'/'+file_name)  
+                if ((args.keyword and all(x in file_name.lower() for x in args.keyword)) or \
+                    not args.keyword) and \
+                    file_extension.lower() in valid_extensions:
+                    target_files.add(root+'/'+file_name)  
 
     print(f"Parsing {len(target_files)} files. This could take a few seconds.")
     # Reset the counter.  It will be incremented as each file is parsed.
@@ -263,11 +261,16 @@ def main(args):
 
         if file_extension in ppt_extensions:
             process_ppt(file_name)
+            total_files +=1 
         else:
             #process_pdf_page_titles(file_name)
             get_total_budget(file_name)
             if not process_pdf_sigs_fitz(file_name):
-                ocr_pdf(file_name)
+                if args.ocr:
+                    ocr_pdf(file_name)
+                else:
+                    print(f"Can't parse {file_name}; Consider enabling OCR with -o True")
+            total_files += 1
 
             # TODO: lowercase and compare to remaining list
     end = time.time()
@@ -299,9 +302,16 @@ if __name__ == "__main__":
     parser.add_argument('--keyword',
                         '-k',
                         action='append',
-                        type=str,
-                        help="Parse only filenames containing ALL of these keywords"
+                        type=lower_str,
+                        help="Parse only filenames containing ALL these keywords"
                         )                        
+
+    parser.add_argument('--ocr',
+                        '-o',
+                        type=str2bool,
+                        default=False,
+                        help="Use OCR (Slower, but can parse scanned PDFs)"
+                        )  
 
     args = parser.parse_args()
     pprint.pprint(args)
