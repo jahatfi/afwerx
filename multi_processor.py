@@ -6,22 +6,7 @@ Parse AFWERX Proposals for required portions:
 """
 import argparse
 import os
-import pprint
-import sys
-import time
-
-from pptx import Presentation
-
-import fitz
-import pytesseract
-from pdf2image import convert_from_path
-from PIL import Image
 from utils import is_directory, is_filename
-
-#from PyPDF2 import PdfFileReader
-
-# If you don't have tesseract executable in your PATH, include the following:
-pytesseract.pytesseract.tesseract_cmd = r'C:\\Program Files\\Tesseract-OCR\\tesseract'
 
 # TODO Update with mandatory sections, then check for their presence
 sections = [
@@ -81,8 +66,11 @@ def process_pdf_page_titles(file_name):
             print(text)    
 # ==============================================================================
 def get_total_budget(file_name,
-                    max_value=1250000,
-                    keyphrase="Total Dollar Amount for this Proposal"):
+                     max_value=1250000,
+                     keyphrase="Total Dollar Amount for this Proposal"):
+    """
+    Print total budget shown in budget document
+    """
     threshold = "$"+str(max_value/1000000)+"M"
     with fitz.open(file_name ) as doc:
         for page in doc:
@@ -187,16 +175,18 @@ def ocr_pdf(file_name):
             single_text = text_segs[seg_i]
             for key_phrase in key_phrases:
                 if key_phrase in single_text:
+                    print(f"Segment {seg_i}".center(80, "*"))
                     for x in text_segs[seg_i-2:seg_i+5]:
                         print(x)
-                    print(f"Segment {seg_i}".center(80, "*"))
-                    print(single_text.strip())
+                    print("*"*80)
+                    #print(single_text.strip())
                     #ocr_cleanup(f, outfile, files_to_remove)
                     #return[0]
             #print(text)
-    f.close()
+    ocr_cleanup(f, outfile, files_to_remove)            
+
 # ==============================================================================
-def main(args):
+def main():
     target_files = set()
     dirs = []
     ppt_extensions = ["ppt", "pptx"]
@@ -260,8 +250,6 @@ if __name__ == "__main__":
 
     # Create the parser and add arguments
     parser = argparse.ArgumentParser()
-    failed = False
-    # More libraries are loaded if invocation is correct
 
     # Add an optional argument for the output file,
     # open in 'write' mode and and specify encoding
@@ -292,12 +280,29 @@ if __name__ == "__main__":
                         )
 
     args = parser.parse_args()
-    pprint.pprint(args)
 
+    # Invocation correct; now load modules
+    # Otherwise you force the user to wait for them to load, 
+    # then tell them the invocation is incorrect, what a waste of time.
+    import pprint
+    import sys
+    import time
+
+    from pptx import Presentation
+
+    import fitz
+    from pdf2image import convert_from_path
+    from PIL import Image
+    import pytesseract
+
+    # If you don't have tesseract executable in your PATH, include the following:
+    #pytesseract.pytesseract.tesseract_cmd = r'C:\\Program Files\\Tesseract-OCR\\tesseract'
+    pprint.pprint(args)
 
     if not args.file and not args.directory:
         print("Must provide at least one pdf file or directory (will recurse over all directory files.)")
         sys.exit(1)
 
     original_dir = os.getcwd()
-    slide = main(args)
+    # args is global so no need to pass it
+    slide = main()
