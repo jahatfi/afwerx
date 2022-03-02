@@ -37,15 +37,15 @@ key_phrases = [
 ]
 # ==============================================================================
 # Reference: https://stackoverflow.com/questions/15008758/parsing-boolean-values-with-argparse
-def str2bool(v):
+def str2bool(this_string):
     """
     Validates that an argparse argument is a boolean value.
     """
-    if isinstance(v, bool):
-        return v
-    if v.lower() in ('yes', 'true', 't', 'y', '1'):
+    if isinstance(this_string, bool):
+        return this_string
+    if this_string.lower() in ('yes', 'true', 't', 'y', '1'):
         return True
-    elif v.lower() in ('no', 'false', 'f', 'n', '0'):
+    elif this_string.lower() in ('no', 'false', 'f', 'n', '0'):
         return False
     else:
         raise argparse.ArgumentTypeError('Boolean value expected.')
@@ -117,7 +117,7 @@ def process_pdf_sigs_fitz(file_name):
             got_text = True
             print(text_segs)
             # Iterate over every text field
-            for seg_i in range(len(text_segs)):
+            for seg_i, _ in enumerate(text_segs):
                 single_text = text_segs[seg_i]
                 for key_phrase in key_phrases:
                     if key_phrase in single_text:
@@ -133,13 +133,16 @@ def process_pdf_sigs_fitz(file_name):
 
 # ==============================================================================
 def ocr_cleanup(open_file_handle, open_file_name, files_to_remove):
-    print("REmoving")
+    """
+    Clean up artifacts of OCR - temp files & open file handles
+    """
+    print("Removing")
     for file_name_to_remove in files_to_remove:
         os.remove(file_name_to_remove)
     if open_file_handle:
         open_file_handle.close()
-    #if open_file_name:
-    #    os.remove(open_file_name)
+    if open_file_name:
+        os.remove(open_file_name)
 
 # ==============================================================================
 def ocr_pdf(file_name):
@@ -158,9 +161,8 @@ def ocr_pdf(file_name):
         page.save(filename, 'JPEG')
         files_to_remove.append(filename)
         image_counter += 1
-    '''
-    Part #2 - Recognizing text from the images using OCR
-    '''
+
+    #Part #2 - Recognizing text from the images using OCR
     # Creating a text file to write the output
     outfile = "out_text.txt"
 
@@ -181,7 +183,7 @@ def ocr_pdf(file_name):
         text_segs = text.split("\n")
         text_segs = [x.strip() for x in text_segs if x]
         # Iterate over every text field
-        for seg_i in range(len(text_segs)):
+        for seg_i,_  in enumerate(text_segs):
             single_text = text_segs[seg_i]
             for key_phrase in key_phrases:
                 if key_phrase in single_text:
@@ -192,7 +194,7 @@ def ocr_pdf(file_name):
                     #ocr_cleanup(f, outfile, files_to_remove)
                     #return[0]
             #print(text)
-
+    f.close()
 # ==============================================================================
 def main(args):
     target_files = set()
