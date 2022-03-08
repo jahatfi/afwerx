@@ -7,6 +7,7 @@ Parse AFWERX Proposals for required portions:
 import argparse
 import os
 from utils import is_directory, is_filename
+import sys
 
 # TODO Update with mandatory sections, then check for their presence
 sections = [
@@ -84,7 +85,7 @@ def get_total_budget(file_name,
                     print(budget_str)
                     budget_float = float(budget_str.lstrip('$').replace(",",""))
                     if budget_float > max_value:
-                        print(f"WARNING!  Proposed budget exceeds ${threshold}!")
+                        print(f"WARNING!  Proposed budget exceeds {threshold}!")
                     break
             #print(text)
 # ==============================================================================
@@ -103,7 +104,7 @@ def process_pdf_sigs_fitz(file_name):
             if not text_segs:
                 continue
             got_text = True
-            print(text_segs)
+            #print(text_segs)
             # Iterate over every text field
             for seg_i, _ in enumerate(text_segs):
                 single_text = text_segs[seg_i]
@@ -234,11 +235,13 @@ def main():
         else:
             #process_pdf_page_titles(file_name)
             get_total_budget(file_name)
+            """
             if not process_pdf_sigs_fitz(file_name):
                 if args.ocr:
                     ocr_pdf(file_name)
                 else:
                     print(f"Can't parse {file_name}; Consider enabling OCR with -o True")
+            """
             total_files += 1
 
             # TODO: lowercase and compare to remaining list
@@ -281,11 +284,14 @@ if __name__ == "__main__":
 
     args = parser.parse_args()
 
+    if not args.file and not args.directory:
+        print("Must provide at least one pdf file or directory (will recurse over all directory files.)")
+        sys.exit(1)
+
     # Invocation correct; now load modules
     # Otherwise you force the user to wait for them to load, 
     # then tell them the invocation is incorrect, what a waste of time.
     import pprint
-    import sys
     import time
 
     from pptx import Presentation
@@ -299,9 +305,7 @@ if __name__ == "__main__":
     #pytesseract.pytesseract.tesseract_cmd = r'C:\\Program Files\\Tesseract-OCR\\tesseract'
     pprint.pprint(args)
 
-    if not args.file and not args.directory:
-        print("Must provide at least one pdf file or directory (will recurse over all directory files.)")
-        sys.exit(1)
+
 
     original_dir = os.getcwd()
     # args is global so no need to pass it
