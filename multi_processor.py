@@ -11,6 +11,8 @@ Parse AFWERX Proposals for required portions:
 """
 import argparse
 import os
+import sys
+
 from utils import is_directory, is_filename
 
 # TODO Update with mandatory sections, then check for their presence
@@ -196,7 +198,16 @@ def process_pdf_sigs_fitz(file_name):
             # Iterate over every text field
             for seg_i, single_text in enumerate(text_segs):
                 for key_phrase in key_phrases:
-                    if key_phrase.lower() in single_text.lower():
+                    if key_phrase in ["DAF End-User", "DAF Customer"]:
+                        if single_text == key_phrase:
+                            for x in text_segs[seg_i:seg_i+2]:
+                                result[key_phrase] += x + '\n'
+                                print(x)
+                            continue
+                    # Remove the .lower() below for more stringent checking
+                    #if key_phrase.lower() in single_text.lower():
+                    if key_phrase in single_text:
+
                         if "TPOC" in key_phrase:
                             result[key_phrase] += single_text + "\n"
                             print(single_text)
@@ -369,7 +380,7 @@ def main():
     print(f"{total_files} files in {end-start} seconds")
     results = pd.DataFrame.from_dict(all_info, orient="index")
     results.index.name = "Proposal ID"
-    pprint.pprint(results)
+    pprint.pprint(results.T)
     results.to_csv("proposals.csv")
 # ==============================================================================
 if __name__ == "__main__":
@@ -407,12 +418,16 @@ if __name__ == "__main__":
 
     args = parser.parse_args()
 
+    if not args.file and not args.directory:
+        print("Must provide at least one pdf file or directory (will recurse over all directory files.)")
+        sys.exit(1)
+
     # Invocation correct; now load modules
     # Otherwise you force the user to wait for them to load, 
     # then tell them the invocation is incorrect, what a waste of time.
     
+    print("Invocation correct, loading modules")
     import pprint
-    import sys
     import time
     import re
     import pandas as pd
@@ -433,9 +448,7 @@ if __name__ == "__main__":
     #pytesseract.pytesseract.tesseract_cmd = r'C:\\Program Files\\Tesseract-OCR\\tesseract'
     pprint.pprint(args)
 
-    if not args.file and not args.directory:
-        print("Must provide at least one pdf file or directory (will recurse over all directory files.)")
-        sys.exit(1)
+
 
     original_dir = os.getcwd()
     # args is global so no need to pass it
