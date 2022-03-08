@@ -77,7 +77,7 @@ def process_pdf_page_titles(file_name):
     with fitz.open(file_name ) as doc:
         for page_count, page in enumerate(doc):
             #print(f"{page_count}".center(80,"-"))            
-            text = page.getText().split('\n')[0]
+            text = page.get_text().split('\n')[0]
             print(text)    
 # ==============================================================================
 def parse_budget(file_name,
@@ -110,7 +110,7 @@ def parse_budget(file_name,
     with fitz.open(file_name ) as doc:
         for page in doc:
             #print(f"{page_count}".center(80,"-"))
-            text_segs += page.getText().split('\n')
+            text_segs += page.get_text().split('\n')
 
         for seg_i, single_text in enumerate(text_segs):
             #print(single_text)
@@ -164,7 +164,7 @@ def get_total_budget(file_name,
     with fitz.open(file_name ) as doc:
         for page in doc:
             #print(f"{page_count}".center(80,"-"))
-            text_segs = page.getText().split('\n')
+            text_segs = page.get_text().split('\n')
             for seg_i, single_text in enumerate(text_segs):
                 #print(keyphrase, type(keyphrase))
                 if keyphrase.lower() in single_text.lower():
@@ -189,7 +189,7 @@ def process_pdf_sigs_fitz(file_name):
     with fitz.open(file_name) as doc:
         # Iterate over every page in the doc
         for page in doc:
-            text_segs = page.getText().split('\n')
+            text_segs = page.get_text().split('\n')
             text_segs = [text.strip() for text in text_segs if text]
             if not text_segs:
                 continue
@@ -360,9 +360,9 @@ def main():
             total_files +=1
         else:
             #process_pdf_page_titles(file_name)
-            if "all_forms" in file_name.lower():
-                all_info[prop_number].update(parse_budget(file_name))
-            #get_total_budget(file_name)
+            #if "all_forms" in file_name.lower():
+            #    all_info[prop_number].update(parse_budget(file_name))
+            get_total_budget(file_name)
             
             # Try to get signatures and TPOC data from this PDF
             sig_dict = process_pdf_sigs_fitz(file_name)
