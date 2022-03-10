@@ -344,8 +344,11 @@ def process_pdf_sigs_fitz2(file_name):
                         index = 0
                         # Sometimes there are blank newlines
                         # Skip over them, grabbing the next two lines with text
-                        while True:
-                            x = text_segs[seg_i+index]
+                        while index < 10:
+                            try:
+                                x = text_segs[seg_i+index]
+                            except IndexError as e:
+                                break
                             if x.strip():
                                 count += 1
                                 result[key_phrase] += x + '\n'
@@ -505,24 +508,23 @@ def parse_file(file_name, prop_number, ocr_flag):
         if "all_forms" in file_name.lower():
             file_info = parse_all_forms(file_name)
             sig_dict.update(file_info)
+            if not file_info:
+                if not sig_dict and ocr_flag:
+                    ocr_pdf(file_name)
+                else:
+                    print(f"Can't parse {file_name}; Consider enabling OCR with -o True")            
         if "budget" in file_name.lower():
             file_info = parse_budget(file_name)
             sig_dict.update(file_info)        
             #sig_dict.update(get_total_budget(file_name))
-        
+            if not file_info:
+                if not sig_dict and ocr_flag:
+                    ocr_pdf(file_name)
+                else:
+                    print(f"Can't parse {file_name}; Consider enabling OCR with -o True")        
         # Try to get signatures and TPOC data from this PDF
         sig_dict.update(process_pdf_sigs_fitz2(file_name))
 
-        #Proposal Cert 
-
-        if not file_info:
-            if not sig_dict and ocr_flag:
-                ocr_pdf(file_name)
-            else:
-                print(f"Can't parse {file_name}; Consider enabling OCR with -o True")
-            
-        ##total_files += 1
-        
     for k in sig_dict.keys():
         try:
             sig_dict[k] = sig_dict[k].strip()
