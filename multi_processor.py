@@ -86,12 +86,72 @@ def process_pdf_page_titles(file_name):
             text = page.get_text().split('\n')[0]
             print(text)    
 # ==============================================================================
+def parse_firm_certificate(seg_i, single_text, text_segs):
+    questions = {
+        "requirements set forth in 13 C.F.R. ??121.702.": 1,
+        "requirements are U.S. citizens or permanent resident aliens in the United States.":2,
+        "It has no more than 500 employees, including the employees of its affiliates.":3,
+        "Number of employees including all affiliates (average for preceding 12 months)":4,
+        "It has met the performance benchmarks as listed by the SBA on their website as eligible to participate":5,
+        "funds or private equity":6,
+        "and/or deliverables":7,
+        "components?": 8,
+        "Firms PI, CO, or owner, a faculty member or student of an institution of higher education":9,
+        "The offeror qualifies as a:":10,
+        "Race of the offeror:":11,
+        "Ethnicity of the offeror":12,
+        "responsible for collecting the tax liability:":13,
+        "involving federal funds":14,
+        "for a fraud-related violation involving federal funds:": 15,
+        "Supporting Documentation:": 16,
+        "firm owned or managed by a corporate entity?":17,
+        "Is your firm affiliated as set forth in 13 CFR ??121.103?": 18
+
+    }
+    result = {}
+    answer = ""
+    for key, value in questions.items():
+        if key in single_text:  
+            if 6 == value:
+                if key in single_text:
+                    text = text_segs[seg_i+1]
+                    result[f"Firm Certificate Q{value}"] = text.strip()
+            
+            elif 10 == value:
+                result[f"Firm Certificate Q{value}"] = ""
+                text = text_segs[seg_i]
+                for index in range(6):
+                    if '[X]' in text:
+                        result[f"Firm Certificate Q{value}"] += text.strip() + '\n'
+                    text = text_segs[seg_i+index]
+
+            elif 11 == value:
+                result[f"Firm Certificate Q{value}"] = ""
+                text = text_segs[seg_i]
+                for index in range(10):
+                    if '[X]' in text:
+                        result[f"Firm Certificate Q{value}"] += text.strip() + '\n'
+                    text = text_segs[seg_i+index]             
+            else:
+                index = 1
+                while True:
+                    answer = text_segs[seg_i+index].strip()
+                    if answer:
+                        result = {f"Firm Certificate Q{value}":answer}
+                        break
+                    index += 1
+            
+            break
+
+    return result
+#             
+# ==============================================================================
 def parse_propsal_certification(seg_i, single_text, text_segs):
     questions = {
         "officer:": 1,
         "705?":2,
         "United States":3,
-        "proposal:":4,
+        "offerors facilities by the offerors employees except as otherwise indicated in the technical":4,
         "or equipment?":5,
         "control regulations":6,
         "and/or deliverables":7,
@@ -99,7 +159,7 @@ def parse_propsal_certification(seg_i, single_text, text_segs):
         "proposals listed above":9,
         "another Federal agency":10,
         "disclosure restrictions":11,
-        "DNA of the soliciation":12,
+        "DNA of the solicitation":12,
         "without evaluation":13,
         "subcontractors proposed":14,
         "22 CFR 120.16": 15,
@@ -112,7 +172,10 @@ def parse_propsal_certification(seg_i, single_text, text_segs):
     answer = ""
     for key, value in questions.items():
         if key in single_text:
-            answer = text_segs[seg_i+1].strip()
+            if value == 4:
+                answer = text_segs[seg_i+2].strip()
+            else:    
+                answer = text_segs[seg_i+1].strip()
             #if "yes" in text_segs[seg_i+1].lower():
             #    answer = "YES"
             #elif "no" in text_segs[seg_i+1].lower():
@@ -121,6 +184,31 @@ def parse_propsal_certification(seg_i, single_text, text_segs):
         #print(result)
 
         
+    return result
+# ==============================================================================
+def parse_all_forms(file_name):
+    """
+    Parse all relevant fields from all
+    """
+    print("*"*80)
+    print(f"Parsing budget: {file_name}")
+
+    text_segs = []
+
+    result = {}
+    answer = ""
+    with fitz.open(file_name ) as doc:
+        for page in doc:
+            #print(f"{page_count}".center(80,"-"))
+            text_segs += page.get_text().split('\n')
+
+        for seg_i, single_text in enumerate(text_segs):
+            #print(single_text)
+            #print(keyphrase, type(keyphrase))
+            result.update(parse_firm_certificate(seg_i, single_text, text_segs))
+            result.update(parse_propsal_certification(seg_i, single_text, text_segs))
+
+    print(result)
     return result
 # ==============================================================================
 def parse_budget(file_name,
@@ -136,18 +224,27 @@ def parse_budget(file_name,
     """
     print("*"*80)
     print(f"Parsing budget: {file_name}")
+    summed_costs = defaultdict(float)
+    sumable_headings =   [
+        "Total Direct Travel Costs (TDT)", # This may appear multiple times, add    
+        "Total Direct Material Costs (TDM)",
+        "Total Subcontractor Costs (TSC)",
+        "Total Direct Supplies Costs (TDS)",
+        "Total Direct Equipment Costs (TDE)",
+        "Total Other Direct Costs (TODC)",
+        "Total Direct Labor (TDL)",
+
+    ]
     headings = [
         "Total Dollar Amount for this Proposal",
-        "Total Subcontractor Costs (TSC)",
-        "Total Direct Travel Costs (TDT)", # This may appear multiple times, add    
-        "Proposed Base Duration (in months)"    
+        "Proposed Base Duration (in months)",
     ]
     text_segs = []
     unique_ts_costs = set()
     ts_cost = 0
     total_travel_cost = 0
     total_proposal_cost = 0
-    unique_travel_costs = set()
+    unique_costs = set()
     result = {}
     answer = ""
     threshold = "$"+str(max_value/1000000)+"M"
@@ -160,7 +257,14 @@ def parse_budget(file_name,
             #print(single_text)
             #print(keyphrase, type(keyphrase))
 
-            result.update(parse_propsal_certification(seg_i, single_text, text_segs))
+            for heading in sumable_headings:
+                if heading.lower() in single_text.lower():
+                    cost_str = text_segs[seg_i+1]
+                    cost_float = float(cost_str.lstrip('$').replace(",",""))
+                    if not cost_float or cost_float not in unique_costs:
+                        unique_costs.add(cost_float)
+                        summed_costs[heading] += cost_float   
+
             for heading in headings:
                 if heading.lower() in single_text.lower():
                     if heading == "Total Dollar Amount for this Proposal":
@@ -172,32 +276,14 @@ def parse_budget(file_name,
                         if total_proposal_cost > max_value:
                             print(f"WARNING! Proposed budget exceeds ${threshold}!")
                         continue
-                    # Sum the total travel costs, careful not to add restated costs
-                    elif heading == "Total Direct Travel Costs (TDT)":
-                        cost_str = text_segs[seg_i+1]
-                        cost_float = float(cost_str.lstrip('$').replace(",",""))
-                        if cost_float not in unique_travel_costs:
-                            unique_travel_costs.add(cost_float)
-                            total_travel_cost += cost_float
-                    # Sum the TSC, careful not to add restated costs
-                    elif heading == "Total Subcontractor Costs (TSC)":
-                        cost_str = text_segs[seg_i+1]
-                        cost_float = float(cost_str.lstrip('$').replace(",",""))
-                        if cost_float not in unique_travel_costs:
-                            unique_ts_costs.add(cost_float)
-                            ts_cost += cost_float
                     
                     elif heading == "Proposed Base Duration (in months)":
                         result["Duration (Mo.)"] = single_text.split()[-1].strip()
                         print(single_text)
                     #print(text_segs[seg_i+1])
             #print(text)     
-    print(f"Total subcontractor costs: ${ts_cost}")
-    print(f"Total travel costs ({len(unique_travel_costs)} unique): ${total_travel_cost}")
-    print(f"Total proposal cost: {budget_str}")
-
-    result["TSC"] = ts_cost
-    result["TTC"] = total_travel_cost
+    pprint.pprint(summed_costs)
+    result.update(summed_costs)
     print(result)
     return result
 # ==============================================================================
@@ -407,6 +493,7 @@ def parse_file(file_name, prop_number, ocr_flag):
     #print("-"*80)
     #print(file_name)
     sig_dict = {}
+    file_info = {}
 
     file_extension = file_name.split(".")[-1]
 
@@ -416,15 +503,19 @@ def parse_file(file_name, prop_number, ocr_flag):
     else:
         #process_pdf_page_titles(file_name)
         if "all_forms" in file_name.lower():
-            sig_dict.update(parse_budget(file_name))
-        #sig_dict.update(get_total_budget(file_name))
+            file_info = parse_all_forms(file_name)
+            sig_dict.update(file_info)
+        if "budget" in file_name.lower():
+            file_info = parse_budget(file_name)
+            sig_dict.update(file_info)        
+            #sig_dict.update(get_total_budget(file_name))
         
         # Try to get signatures and TPOC data from this PDF
         sig_dict.update(process_pdf_sigs_fitz2(file_name))
 
         #Proposal Cert 
 
-        if not sig_dict:
+        if not file_info:
             if not sig_dict and ocr_flag:
                 ocr_pdf(file_name)
             else:
@@ -432,6 +523,11 @@ def parse_file(file_name, prop_number, ocr_flag):
             
         ##total_files += 1
         
+    for k in sig_dict.keys():
+        try:
+            sig_dict[k] = sig_dict[k].strip()
+        except AttributeError as e:
+            pass
     return sig_dict
 # ==============================================================================
 
@@ -493,9 +589,9 @@ def main():
     print(f"{len(target_files)} files in {end-start} seconds")
     results = pd.DataFrame.from_dict(all_info, orient="index")
     
-    sorted_cols = results.columns
-    sorted_cols = sorted_cols.sort(key=natural_keys)
-    pprint.pprint(sorted_cols)
+    sorted_cols = results.columns.tolist()
+    sorted_cols.sort(key=natural_keys)
+
     results = results[sorted_cols]
 
     results.index.name = "Proposal ID"
