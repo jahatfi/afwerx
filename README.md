@@ -25,7 +25,7 @@ usage: multi_processor.py [-h] [--file FILE] [--directory DIRECTORY] [--keyword 
 
 optional arguments:
   -h, --help            show this help message and exit
-  --file FILE, -f FILE  Files to parse. Must be ppt/ppt/pptx
+  --file FILE, -f FILE  Files to parse. Must be pdf/ppt/pptx
   --directory DIRECTORY, -d DIRECTORY
                         Directories to search for files to parse
   --keyword KEYWORD, -k KEYWORD
