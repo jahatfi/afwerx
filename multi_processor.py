@@ -32,11 +32,7 @@ key_phrases = [
     "TPOCS:",
     "Technical Point of Contact"
 ]
-# ==============================================================================
-# Reference: https://stackoverflow.com/questions/50644066
 
-def pretty_print(df):
-    print(display(HTML(df.to_html().replace("\\n","<br>"))))
 # ==============================================================================
 # Reference: https://stackoverflow.com/questions/15008758/parsing-boolean-values-with-argparse
 def str2bool(this_string):
@@ -117,21 +113,32 @@ def parse_firm_certificate(seg_i, single_text, text_segs):
                     text = text_segs[seg_i+1]
                     result[f"Firm Certificate Q{value}"] = text.strip()
             
-            elif 10 == value:
+            elif value in [10,11]:
                 result[f"Firm Certificate Q{value}"] = ""
                 text = text_segs[seg_i]
-                for index in range(6):
+                for index in range(10):
                     if '[X]' in text:
                         result[f"Firm Certificate Q{value}"] += text.strip() + '\n'
                     text = text_segs[seg_i+index]
 
-            elif 11 == value:
+            elif 101 == value:
                 result[f"Firm Certificate Q{value}"] = ""
                 text = text_segs[seg_i]
                 for index in range(10):
                     if '[X]' in text:
                         result[f"Firm Certificate Q{value}"] += text.strip() + '\n'
                     text = text_segs[seg_i+index]             
+
+            elif 16 == value:
+                if key in single_text:
+                    index = -2
+                    while index < 8:
+                        answer = text_segs[seg_i+index].strip()
+                        # TODO clean this logic up
+                        if re.search('\d{5,}', answer) and not answer.endswith("pdf"):
+                            result = {f"Firm Certificate Q{value}":answer}
+                            break
+                        index += 1               
             else:
                 index = 1
                 while True:
@@ -150,7 +157,7 @@ def parse_propsal_certification(seg_i, single_text, text_segs):
     questions = {
         "officer:": 1,
         "705?":2,
-        "United States":3,
+        "During the performance of the contract, the research/research and development will be performed in the":3,
         "offerors facilities by the offerors employees except as otherwise indicated in the technical":4,
         "or equipment?":5,
         "control regulations":6,
@@ -172,14 +179,23 @@ def parse_propsal_certification(seg_i, single_text, text_segs):
     answer = ""
     for key, value in questions.items():
         if key in single_text:
-            if value == 4:
+            if value in [3,4]:
                 answer = text_segs[seg_i+2].strip()
-            else:    
-                answer = text_segs[seg_i+1].strip()
-            #if "yes" in text_segs[seg_i+1].lower():
-            #    answer = "YES"
-            #elif "no" in text_segs[seg_i+1].lower():
-            #    answer = "NO"
+
+            elif 6 == value:
+                if key in single_text:
+                    for text in text_segs[seg_i+1:seg_i+3]:
+                        answer = text.strip()
+                        if answer.lower() in ["yes", "no"]:
+                            break
+            else:  
+                index = 1
+                while index < 8:  
+                    answer = text_segs[seg_i+index].strip()
+                    if answer:
+                        break
+                    index += 1
+
             result = {f"Proposal Certification Q{value}":answer}
         #print(result)
 
@@ -208,7 +224,7 @@ def parse_all_forms(file_name):
             result.update(parse_firm_certificate(seg_i, single_text, text_segs))
             result.update(parse_propsal_certification(seg_i, single_text, text_segs))
 
-    print(result)
+    #print(result)
     return result
 # ==============================================================================
 def parse_budget(file_name,
@@ -279,12 +295,12 @@ def parse_budget(file_name,
                     
                     elif heading == "Proposed Base Duration (in months)":
                         result["Duration (Mo.)"] = single_text.split()[-1].strip()
-                        print(single_text)
+                        #print(single_text)
                     #print(text_segs[seg_i+1])
             #print(text)     
-    pprint.pprint(summed_costs)
+    #pprint.pprint(summed_costs)
     result.update(summed_costs)
-    print(result)
+    #print(result)
     return result
 # ==============================================================================
 def get_total_budget(file_name,
@@ -304,10 +320,10 @@ def get_total_budget(file_name,
                 if keyphrase.lower() in single_text.lower():
                     #print(single_text)
                     budget_str = text_segs[seg_i+1]
-                    print(budget_str)
+                    #print(budget_str)
                     budget_float = float(budget_str.lstrip('$').replace(",",""))
-                    if budget_float > max_value:
-                        print(f"WARNING! Proposed budget exceeds ${threshold}!")
+                    #if budget_float > max_value:
+                        #print(f"WARNING! Proposed budget exceeds ${threshold}!")
                     break
     return {"Total Proposal Value" :budget_float}
 # ==============================================================================
@@ -352,7 +368,7 @@ def process_pdf_sigs_fitz2(file_name):
                             if x.strip():
                                 count += 1
                                 result[key_phrase] += x + '\n'
-                                print(x)
+                                #print(x)
 
                             index +=1 
                             if x.rstrip().endswith(","):
@@ -369,7 +385,7 @@ def process_pdf_sigs_fitz(file_name):
     Print info about digital signatures, as well as text and surrounding
     text containing any of the key phrases defined below
     """
-    print(file_name)
+    #print(file_name)
     got_text = False
     result = defaultdict(str)
 
@@ -389,7 +405,7 @@ def process_pdf_sigs_fitz(file_name):
                         if single_text == key_phrase:
                             for x in text_segs[seg_i:seg_i+2]:
                                 result[key_phrase] += x + '\n'
-                                print(x)
+                                #print(x)
                             continue
                     # Remove the .lower() below for more stringent checking
                     #if key_phrase.lower() in single_text.lower():
@@ -506,6 +522,7 @@ def parse_file(file_name, prop_number, ocr_flag):
     else:
         #process_pdf_page_titles(file_name)
         if "all_forms" in file_name.lower():
+            print(file_name)
             file_info = parse_all_forms(file_name)
             sig_dict.update(file_info)
             if not file_info:
@@ -514,6 +531,7 @@ def parse_file(file_name, prop_number, ocr_flag):
                 else:
                     print(f"Can't parse {file_name}; Consider enabling OCR with -o True")            
         if "budget" in file_name.lower():
+            print(file_name)
             file_info = parse_budget(file_name)
             sig_dict.update(file_info)        
             #sig_dict.update(get_total_budget(file_name))
