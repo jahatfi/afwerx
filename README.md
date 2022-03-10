@@ -13,7 +13,8 @@ So far it can:
 
 ### Installation (I need to test this)
 1. python modules: `pip install -r requirements.txt`  
-2. Install tesseract: Here's instructions for Windows 10: https://medium.com/quantrium-tech/installing-and-using-tesseract-4-on-windows-10-4f7930313f82
+2. Install tesseract **only if using Optical Character Recognition (OCR) (for scanned PDFS)**:  
+    Here's instructions for Windows 10: https://medium.com/quantrium-tech/installing-and-using-tesseract-4-on-windows-10-4f7930313f82
 
 
 ### Combine keywords filters (-k foo -k bar) to process only files that contain "foo" AND "bar"
@@ -30,6 +31,22 @@ optional arguments:
   --keyword KEYWORD, -k KEYWORD
                         Parse only filenames containing ALL of these keywords
 ```
+### Examples
+Process only proposal #1234
+```bash
+python multi_processor.py -d proposals_directory -k 1234
+```
+
+Process only files with "budget" in the filename 
+```bash
+python multi_processor.py -d proposals_directory -k budget
+```
+
+Process only files with "budget" in the filename in proposal 1234
+```bash
+python multi_processor.py -d proposals_directory -k budget -k 1234
+```
+
 
 
 ### References
