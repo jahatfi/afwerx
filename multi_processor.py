@@ -630,7 +630,7 @@ if __name__ == "__main__":
                         '-f',
                         action='append',
                         type=is_filename,
-                        help="Files to parse.  Must be ppt/ppt/pptx")
+                        help="Files to parse.  Must be pdf/ppt/pptx")
 
     parser.add_argument('--directory',
                         '-d',
