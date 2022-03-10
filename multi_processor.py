@@ -15,6 +15,8 @@ import sys
 
 from utils import is_directory, is_filename
 
+ppt_loaded = False
+
 # TODO Update with mandatory sections, then check for their presence
 sections = [
     "Method",
@@ -61,6 +63,10 @@ def process_ppt(file_name):
     """
     Prints the title of every slide
     """
+    if not ppt_loaded:
+        print("Loading pptx module...")
+        from pptx import Presentation
+        print("Done")
     prs = Presentation(file_name)
     for slide in prs.slides:
         try:
@@ -79,6 +85,43 @@ def process_pdf_page_titles(file_name):
             #print(f"{page_count}".center(80,"-"))            
             text = page.get_text().split('\n')[0]
             print(text)    
+# ==============================================================================
+def parse_propsal_certification(seg_i, single_text, text_segs):
+    questions = {
+        "officer:": 1,
+        "705?":2,
+        "United States":3,
+        "proposal:":4,
+        "or equipment?":5,
+        "control regulations":6,
+        "and/or deliverables":7,
+        "components?": 8,
+        "proposals listed above":9,
+        "another Federal agency":10,
+        "disclosure restrictions":11,
+        "DNA of the soliciation":12,
+        "without evaluation":13,
+        "subcontractors proposed":14,
+        "22 CFR 120.16": 15,
+        "will be on the project?": 16,
+        "economically disadvantaged":17,
+        "Economic Development Organizations?": 18
+
+    }
+    result = {}
+    answer = ""
+    for key, value in questions.items():
+        if key in single_text:
+            answer = text_segs[seg_i+1].strip()
+            #if "yes" in text_segs[seg_i+1].lower():
+            #    answer = "YES"
+            #elif "no" in text_segs[seg_i+1].lower():
+            #    answer = "NO"
+            result = {f"Proposal Certification Q{value}":answer}
+        #print(result)
+
+        
+    return result
 # ==============================================================================
 def parse_budget(file_name,
                  max_value=1250000,
@@ -106,6 +149,7 @@ def parse_budget(file_name,
     total_proposal_cost = 0
     unique_travel_costs = set()
     result = {}
+    answer = ""
     threshold = "$"+str(max_value/1000000)+"M"
     with fitz.open(file_name ) as doc:
         for page in doc:
@@ -115,6 +159,8 @@ def parse_budget(file_name,
         for seg_i, single_text in enumerate(text_segs):
             #print(single_text)
             #print(keyphrase, type(keyphrase))
+
+            result.update(parse_propsal_certification(seg_i, single_text, text_segs))
             for heading in headings:
                 if heading.lower() in single_text.lower():
                     if heading == "Total Dollar Amount for this Proposal":
@@ -152,6 +198,7 @@ def parse_budget(file_name,
 
     result["TSC"] = ts_cost
     result["TTC"] = total_travel_cost
+    print(result)
     return result
 # ==============================================================================
 def get_total_budget(file_name,
@@ -160,6 +207,7 @@ def get_total_budget(file_name,
     """
     Print total budget shown in budget document
     """
+    budget_float = -1.0
     threshold = "$"+str(max_value/1000000)+"M"
     with fitz.open(file_name ) as doc:
         for page in doc:
@@ -175,7 +223,57 @@ def get_total_budget(file_name,
                     if budget_float > max_value:
                         print(f"WARNING! Proposed budget exceeds ${threshold}!")
                     break
-            #print(text)
+    return {"Total Proposal Value" :budget_float}
+# ==============================================================================
+def process_pdf_sigs_fitz2(file_name):
+    """
+    Print info about digital signatures, as well as text and surrounding
+    text containing any of the key phrases defined below
+    """
+    print(file_name)
+    got_text = False
+    result = defaultdict(str)
+    headers = [
+        "Primary End-User Organization",
+        "Primary Customer Organization",
+        "Phase II Technical Points of Contact (TPOCs)"
+    ]
+    with fitz.open(file_name) as doc:
+
+        # Iterate over every page in the doc
+        for pi, page in enumerate(doc):
+            text_segs = page.get_text().split('\n')
+            #text_segs = [text.strip() for text in text_segs if text.strip()]
+            if not text_segs:
+                continue
+
+            got_text = True
+            #print(text_segs)
+            # Iterate over every text field
+            for seg_i, single_text in enumerate(text_segs):
+                #print(f"Page #{pi}, text #: {seg_i}: '{single_text}'")
+                for key_phrase in headers:
+                    if key_phrase in single_text:
+                        count = 0
+                        index = 0
+                        # Sometimes there are blank newlines
+                        # Skip over them, grabbing the next two lines with text
+                        while True:
+                            x = text_segs[seg_i+index]
+                            if x.strip():
+                                count += 1
+                                result[key_phrase] += x + '\n'
+                                print(x)
+
+                            index +=1 
+                            if x.rstrip().endswith(","):
+                                continue
+                            if count > 2 or index > 10:
+                                break
+
+                        headers.remove(key_phrase)
+                        continue
+    return result
 # ==============================================================================
 def process_pdf_sigs_fitz(file_name):
     """
@@ -304,13 +402,49 @@ def ocr_pdf(file_name):
                     #return[0]
             #print(text)
     ocr_cleanup(f, outfile, files_to_remove)            
-
 # ==============================================================================
+def parse_file(file_name, prop_number, ocr_flag):
+    #print("-"*80)
+    #print(file_name)
+    sig_dict = {}
+
+    file_extension = file_name.split(".")[-1]
+
+    if file_extension in ppt_extensions:
+        process_ppt(file_name)
+        #total_files +=1
+    else:
+        #process_pdf_page_titles(file_name)
+        if "all_forms" in file_name.lower():
+            sig_dict.update(parse_budget(file_name))
+        #sig_dict.update(get_total_budget(file_name))
+        
+        # Try to get signatures and TPOC data from this PDF
+        sig_dict.update(process_pdf_sigs_fitz2(file_name))
+
+        #Proposal Cert 
+
+        if not sig_dict:
+            if not sig_dict and ocr_flag:
+                ocr_pdf(file_name)
+            else:
+                print(f"Can't parse {file_name}; Consider enabling OCR with -o True")
+            
+        ##total_files += 1
+        
+    return sig_dict
+# ==============================================================================
+
+#https://www.tutorialspoint.com/How-to-correctly-sort-a-string-with-a-number-inside-in-Python
+def atoi(text):
+    return int(text) if text.isdigit() else text
+def natural_keys(text):
+    return [ atoi(c) for c in re.split('(\d+)',text) ]
+
 def main():
     target_files = set()
     dirs = []
-    ppt_extensions = ["ppt", "pptx"]
-    valid_extensions = ppt_extensions + ["pdf"]
+
     all_info = defaultdict(dict)
 
     if not args.directory:
@@ -340,45 +474,30 @@ def main():
 
     print(f"Parsing {len(target_files)} files. This could take a few seconds.")
     # Reset the counter.  It will be incremented as each file is parsed.
-    total_files = 0
+    #total_files = 0
 
     # Here is the serial (non-parallel) approach.  Slow, but it works.
     start = time.time()
 
     for file_name in sorted(target_files):
-        #print("-"*80)
-        #print(file_name)
-
         prop_number = re.search(r"(\d{4})", file_name)
         if prop_number:
             prop_number = prop_number.group(1)
-            #print(f"Proposal: {prop_number}")
-        file_extension = file_name.split(".")[-1]
+            #print(f"Proposal: {prop_number}")        
+            file_info = parse_file(file_name, prop_number, args.ocr)
+            if file_info:
+                all_info[prop_number].update(file_info)
 
-        if file_extension in ppt_extensions:
-            process_ppt(file_name)
-            total_files +=1
-        else:
-            #process_pdf_page_titles(file_name)
-            #if "all_forms" in file_name.lower():
-            #    all_info[prop_number].update(parse_budget(file_name))
-            get_total_budget(file_name)
-            
-            # Try to get signatures and TPOC data from this PDF
-            sig_dict = process_pdf_sigs_fitz(file_name)
-
-            if sig_dict:
-                all_info[prop_number].update(sig_dict)
-            elif args.ocr:
-                ocr_pdf(file_name)
-            else:
-                print(f"Can't parse {file_name}; Consider enabling OCR with -o True")
-            
-            total_files += 1
 
     end = time.time()
-    print(f"{total_files} files in {end-start} seconds")
+    print(f"{len(target_files)} files in {end-start} seconds")
     results = pd.DataFrame.from_dict(all_info, orient="index")
+    
+    sorted_cols = results.columns
+    sorted_cols = sorted_cols.sort(key=natural_keys)
+    pprint.pprint(sorted_cols)
+    results = results[sorted_cols]
+
     results.index.name = "Proposal ID"
     pprint.pprint(results.T)
     results.to_csv("proposals.csv")
@@ -431,24 +550,27 @@ if __name__ == "__main__":
     import time
     import re
     import pandas as pd
-    from IPython.display import display, HTML
+    #from IPython.display import display, HTML
 
     from collections import defaultdict
-    from pptx import Presentation
-
-    from tabulate import tabulate
+    #from pptx import Presentation
+    print("Loading fitz")
     import fitz
-    from pdf2image import convert_from_path
-    from PIL import Image
-    import pytesseract
+    if args.ocr:
+        print("Loading OCR modules...")
+        from pdf2image import convert_from_path
+        from PIL import Image
+        import pytesseract
 
+    print("Done loading modules")
     pd.set_option('display.width', 1000)
     pd.set_option('display.max_colwidth', 1000)
     # If you don't have tesseract executable in your PATH, include the following:
     #pytesseract.pytesseract.tesseract_cmd = r'C:\\Program Files\\Tesseract-OCR\\tesseract'
     pprint.pprint(args)
 
-
+    ppt_extensions = ["ppt", "pptx"]
+    valid_extensions = ppt_extensions + ["pdf"]
 
     original_dir = os.getcwd()
     # args is global so no need to pass it
