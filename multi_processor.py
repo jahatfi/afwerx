@@ -208,8 +208,8 @@ def parse_propsal_certification(seg_i, single_text, text_segs):
 def parse_safety(seg_i, single_text, text_segs):
     start_number = 0
     result = ""
-    if "....." in single_text:
-        return {}
+    #if "....." in single_text:
+    #    return {}
     if re.search("safety.*related.*deliverables", single_text.lower()):
         for i in range(-1,1):
             try:
@@ -252,25 +252,18 @@ def parse_all_forms(file_name):
         for seg_i, (page_i, single_text) in enumerate(text_segs):
             print(f"Page #{page_i}, text #: {seg_i}: '{single_text}'")
 
-<<<<<<< HEAD
         for seg_i, single_text in enumerate(text_segs):
             if not single_text:
                 continue
-=======
->>>>>>> 72036240b784288e40795a7bd54dfbccc303babe
             #print(single_text)
             #print(keyphrase, type(keyphrase))
             result.update(parse_firm_certificate(seg_i, single_text, text_segs))
             result.update(parse_propsal_certification(seg_i, single_text, text_segs))
-<<<<<<< HEAD
             if not safety_info_found:
                 safety_info = parse_safety(seg_i, single_text, text_segs)
                 if safety_info:
                     safety_info_found = True
                     result.update(safety_info)
-=======
-            parse_safety(seg_i, single_text, text_segs)
->>>>>>> 72036240b784288e40795a7bd54dfbccc303babe
 
     #print(result)
     return result
