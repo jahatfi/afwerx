@@ -238,29 +238,39 @@ def parse_all_forms(file_name):
     Parse all relevant fields from all
     """
     print("*"*80)
-    print(f"Parsing budget: {file_name}")
+    print(f"Parsing all forms: {file_name}")
 
     text_segs = []
     safety_info_found = False
     result = {}
     answer = ""
     with fitz.open(file_name ) as doc:
-        for page in doc:
+        for page_i, page in enumerate(doc):
             #print(f"{page_count}".center(80,"-"))
-            text_segs += page.get_text().split('\n')
+            text_segs += [page.get_text().split('\n'), page_i]
 
+        for seg_i, (page_i, single_text) in enumerate(text_segs):
+            print(f"Page #{page_i}, text #: {seg_i}: '{single_text}'")
+
+<<<<<<< HEAD
         for seg_i, single_text in enumerate(text_segs):
             if not single_text:
                 continue
+=======
+>>>>>>> 72036240b784288e40795a7bd54dfbccc303babe
             #print(single_text)
             #print(keyphrase, type(keyphrase))
             result.update(parse_firm_certificate(seg_i, single_text, text_segs))
             result.update(parse_propsal_certification(seg_i, single_text, text_segs))
+<<<<<<< HEAD
             if not safety_info_found:
                 safety_info = parse_safety(seg_i, single_text, text_segs)
                 if safety_info:
                     safety_info_found = True
                     result.update(safety_info)
+=======
+            parse_safety(seg_i, single_text, text_segs)
+>>>>>>> 72036240b784288e40795a7bd54dfbccc303babe
 
     #print(result)
     return result
