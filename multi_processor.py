@@ -202,6 +202,36 @@ def parse_propsal_certification(seg_i, single_text, text_segs):
 
         
     return result
+
+# ==============================================================================
+
+def parse_safety(seg_i, single_text, text_segs):
+    start_number = 0
+    result = ""
+    if "....." in single_text:
+        return {}
+    if re.search("safety.*related.*deliverables", single_text.lower()):
+        for i in range(-1,1):
+            try:
+                start_number = float(text_segs[seg_i-1])
+                break
+            except ValueError as e:
+                pass
+        
+        for i in range(4):
+            try:
+                new_number = float(text_segs[seg_i+i])
+                if math.floor(new_number) - math.floor(start_number) > .5:
+                    break   
+            except ValueError as e:
+                pass
+            result += text_segs[seg_i+i] + '\n'
+            print(text_segs[seg_i+i])   
+    if result:
+        x = {"Safety-Related Deliverables": result}
+        print(x)
+        return x
+    return {}
 # ==============================================================================
 def parse_all_forms(file_name):
     """
@@ -211,7 +241,7 @@ def parse_all_forms(file_name):
     print(f"Parsing budget: {file_name}")
 
     text_segs = []
-
+    safety_info_found = False
     result = {}
     answer = ""
     with fitz.open(file_name ) as doc:
@@ -220,10 +250,17 @@ def parse_all_forms(file_name):
             text_segs += page.get_text().split('\n')
 
         for seg_i, single_text in enumerate(text_segs):
+            if not single_text:
+                continue
             #print(single_text)
             #print(keyphrase, type(keyphrase))
             result.update(parse_firm_certificate(seg_i, single_text, text_segs))
             result.update(parse_propsal_certification(seg_i, single_text, text_segs))
+            if not safety_info_found:
+                safety_info = parse_safety(seg_i, single_text, text_segs)
+                if safety_info:
+                    safety_info_found = True
+                    result.update(safety_info)
 
     #print(result)
     return result
@@ -662,10 +699,13 @@ if __name__ == "__main__":
     # Otherwise you force the user to wait for them to load, 
     # then tell them the invocation is incorrect, what a waste of time.
     
-    print("Invocation correct, loading modules")
+    print("Invocation correct, loading standard modules")
     import pprint
     import time
     import re
+    import math
+
+    print("Loading pandas and collections")
     import pandas as pd
     #from IPython.display import display, HTML
 
