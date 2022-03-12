@@ -83,51 +83,36 @@ def process_pdf_page_titles(file_name):
             text = page.get_text().split('\n')[0]
             print(text)    
 # ==============================================================================
-def parse_firm_certificate(seg_i, single_text, text_segs):
-    questions = {
-        "requirements set forth in 13 C.F.R. ??121.702.": 1,
-        "requirements are U.S. citizens or permanent resident aliens in the United States.":2,
-        "It has no more than 500 employees, including the employees of its affiliates.":3,
-        "Number of employees including all affiliates (average for preceding 12 months)":4,
-        "It has met the performance benchmarks as listed by the SBA on their website as eligible to participate":5,
-        "funds or private equity":6,
-        "and/or deliverables":7,
-        "components?": 8,
-        "Firms PI, CO, or owner, a faculty member or student of an institution of higher education":9,
-        "The offeror qualifies as a:":10,
-        "Race of the offeror:":11,
-        "Ethnicity of the offeror":12,
-        "responsible for collecting the tax liability:":13,
-        "involving federal funds":14,
-        "for a fraud-related violation involving federal funds:": 15,
-        "Supporting Documentation:": 16,
-        "firm owned or managed by a corporate entity?":17,
-        "Is your firm affiliated as set forth in 13 CFR ??121.103?": 18
+def parse_firm_certificate(seg_i, single_text, text_segs, firm_cert_questions):
 
-    }
     result = {}
     answer = ""
-    for key, value in questions.items():
+    for value, key in firm_cert_questions.items():
         if key in single_text:  
-            if 6 == value:
+            if value == 6:
                 if key in single_text:
                     text = text_segs[seg_i+1]
-                    result[f"Firm Certificate Q{value}"] = text.strip()
+                    result[value] = text.strip()      
+
+            if value in [7,8]:
+                if key in single_text:
+                    text = text_segs[seg_i+2]
+                    result[value] = text.strip()                        
             
             elif value in [10,11]:
-                result[f"Firm Certificate Q{value}"] = ""
+                result[value] = ""
                 text = text_segs[seg_i]
                 for index in range(10):
                     if '[X]' in text:
-                        result[f"Firm Certificate Q{value}"] += text.strip() + '\n'
+                        result[value] += text.strip() + '\n'
                     text = text_segs[seg_i+index]
 
             elif 101 == value:
-                result[f"Firm Certificate Q{value}"] = ""
+                result[value] = ""
                 text = text_segs[seg_i]
                 for index in range(10):
                     if '[X]' in text:
-                        result[f"Firm Certificate Q{value}"] += text.strip() + '\n'
+                        result[value] += text.strip() + '\n'
                     text = text_segs[seg_i+index]             
 
             elif 16 == value:
@@ -136,8 +121,8 @@ def parse_firm_certificate(seg_i, single_text, text_segs):
                     while index < 8:
                         answer = text_segs[seg_i+index].strip()
                         # TODO clean this logic up
-                        if re.search('\d{5,}', answer) and not answer.endswith("pdf"):
-                            result = {f"Firm Certificate Q{value}":answer}
+                        if some_digits.search(answer) and not answer.endswith("pdf"):
+                            result = {value:answer}
                             break
                         index += 1               
             else:
@@ -145,7 +130,7 @@ def parse_firm_certificate(seg_i, single_text, text_segs):
                 while True:
                     answer = text_segs[seg_i+index].strip()
                     if answer:
-                        result = {f"Firm Certificate Q{value}":answer}
+                        result = {value:answer}
                         break
                     index += 1
             
@@ -154,34 +139,16 @@ def parse_firm_certificate(seg_i, single_text, text_segs):
     return result
 #             
 # ==============================================================================
-def parse_propsal_certification(seg_i, single_text, text_segs):
-    questions = {
-        "officer:": 1,
-        "705?":2,
-        "During the performance of the contract, the research/research and development will be performed in the":3,
-        "offerors facilities by the offerors employees except as otherwise indicated in the technical":4,
-        "or equipment?":5,
-        "control regulations":6,
-        "and/or deliverables":7,
-        "components?": 8,
-        "proposals listed above":9,
-        "another Federal agency":10,
-        "disclosure restrictions":11,
-        "DNA of the solicitation":12,
-        "without evaluation":13,
-        "subcontractors proposed":14,
-        "22 CFR 120.16": 15,
-        "will be on the project?": 16,
-        "economically disadvantaged":17,
-        "Economic Development Organizations?": 18
+def parse_proposal_certification(seg_i, single_text, text_segs, prop_cert_questions):
 
-    }
     result = {}
     answer = ""
-    for key, value in questions.items():
+    for value, key in prop_cert_questions.items():
         if key in single_text:
             if value in [3,4]:
                 answer = text_segs[seg_i+2].strip()
+                if not answer:
+                    answer = text_segs[seg_i+3].strip()
 
             elif 6 == value:
                 if key in single_text:
@@ -189,6 +156,9 @@ def parse_propsal_certification(seg_i, single_text, text_segs):
                         answer = text.strip()
                         if answer.lower() in ["yes", "no"]:
                             break
+
+            #elif value in [7,8]:
+            #    print(text_segs[seg_i+1:seg_i+3])
             else:  
                 index = 1
                 while index < 8:  
@@ -197,41 +167,63 @@ def parse_propsal_certification(seg_i, single_text, text_segs):
                         break
                     index += 1
 
-            result = {f"Proposal Certification Q{value}":answer}
+            result = {value:answer}
         #print(result)
-
         
     return result
-
 # ==============================================================================
 
 def parse_safety(seg_i, single_text, text_segs):
+    """
+    Parse the "Safety Related Deliverables" section
+    """
     start_number = 0
     result = ""
-    #if "....." in single_text:
-    #    return {}
-    if re.search("safety.*related.*deliverables", single_text.lower()):
-        for i in range(-1,1):
-            try:
-                start_number = float(text_segs[seg_i-1])
-                break
-            except ValueError as e:
-                pass
-        
-        for i in range(4):
-            try:
-                new_number = float(text_segs[seg_i+i])
-                if math.floor(new_number) - math.floor(start_number) > .5:
-                    break   
-            except ValueError as e:
-                pass
-            result += text_segs[seg_i+i] + '\n'
-            print(text_segs[seg_i+i])   
+    low_start = 0
+
+    # Return immediately if that header isn't present
+    if not safety_heading.search(single_text.lower()):
+        return {}
+
+    # Header is present, search nearby for an associated number, e.g.
+    # 2.7 Safety Related Deliverables
+    for i in range(-2,1):
+        try:
+            start_number = float(text_segs[seg_i+i].split()[0].rstrip('.'))
+            low_start = i
+        except (ValueError, IndexError) as e:
+            pass
+            #print(f"Exception {e}")
+
+    # Low start <0 means the number was found in a text block BEFORE the key word
+    if low_start < 0:
+        for i in range(low_start,0,1):
+            result += text_segs[seg_i+i] + ' '
+        #result += '\n'
+
+    # Keep up to 100 lines that follow, searching for the next section, e.g.
+    #  the next number, e.g.
+    # 2.8 Other Deliverables 
+    # 3. Next section
+    # Stop when this next section is found
+    # TODO 
+    for i in range(4):
+        try:
+            number_str = text_segs[seg_i+i].split()[0].rstrip('.')
+            new_number = float(number_str)
+            delta = math.floor(new_number) - math.floor(start_number)
+            if delta >= 1 or not number_str.startswith(str(start_number)):
+                break   
+        except ValueError as e:
+            #print("Error", e)
+            pass
+        result += text_segs[seg_i+i] + '\n'
+        #print(text_segs[seg_i+i])   
+
     if result:
-        x = {"Safety-Related Deliverables": result}
-        print(x)
-        return x
-    return {}
+        return {"Safety-Related Deliverables": result}
+    else:
+        return {}
 # ==============================================================================
 def parse_all_forms(file_name):
     """
@@ -240,32 +232,99 @@ def parse_all_forms(file_name):
     print("*"*80)
     print(f"Parsing all forms: {file_name}")
 
+    prop_cert_questions = {
+        1: "officer:",
+        2: "705?",
+        3: "During the performance of the contract, the research/research and development will be performed",
+        4: "offerors facilities by the offerors employees except as otherwise indicated in the technical",
+        5: "or equipment?",
+        6: "control regulations",
+        7: "There will be ITAR/EAR data in this work and/or deliverables.",
+        8: "components?",
+        9: "proposals listed above",
+        10: "another Federal agency",
+        11: "disclosure restriction?",
+        12: "DNA of the solicitation",
+        13: "without evaluation",
+        14: "subcontractors proposed",
+        15: "22 CFR 120.16",
+        16: "will be on the project?",
+        17: "Is the principal investigator socially/economically disadvantaged?",
+        18: "Economic Development Organizations?"
+    }
+
+    firm_cert_questions = {
+        1: "requirements set forth in 13 C.F.R. ??121.702.",
+        2: "requirements are U.S. citizens or permanent resident aliens in the United States.",
+        3: "It has no more than 500 employees, including the employees of its affiliates.",
+        4: "Number of employees including all affiliates (average for preceding 12 months)",
+        5: "It has met the performance benchmarks as listed by the SBA on their website as eligible to participate",
+        6: "funds or private equity",
+        7: "It has more than 50% owned by a single Venture Capital Owned Company (VCOC), hedge fund, or private equity",
+        8: "It has more than 50% owned by multiple business concerns that are VOCs, hedge funds, or private equity",
+        9: "Firms PI, CO, or owner, a faculty member or student of an institution of higher education",
+        10: "The offeror qualifies as a:",
+        11: "Race of the offeror:",
+        12: "Ethnicity of the offeror",
+        13: "responsible for collecting the tax liability:",
+        14: "involving federal funds",
+        15: "for a fraud-related violation involving federal funds:",
+        16: "Supporting Documentation:",
+        17: "firm owned or managed by a corporate entity?",
+        18: "Is your firm affiliated as set forth in 13 CFR ??121.103?"
+    }    
+
     text_segs = []
-    safety_info_found = False
+    safety_info_found = 0
     result = {}
     answer = ""
     with fitz.open(file_name ) as doc:
         for page_i, page in enumerate(doc):
             #print(f"{page_count}".center(80,"-"))
-            text_segs += [page.get_text().split('\n'), page_i]
+            text_segs += page.get_text().split('\n')
 
-        for seg_i, (page_i, single_text) in enumerate(text_segs):
-            print(f"Page #{page_i}, text #: {seg_i}: '{single_text}'")
+        #for seg_i, (page_i, single_text) in enumerate(text_segs):
+        #    print(f"Page #{page_i}, text #: {seg_i}: '{single_text}'")
 
         for seg_i, single_text in enumerate(text_segs):
             if not single_text:
                 continue
-            #print(single_text)
-            #print(keyphrase, type(keyphrase))
-            result.update(parse_firm_certificate(seg_i, single_text, text_segs))
-            result.update(parse_propsal_certification(seg_i, single_text, text_segs))
-            if not safety_info_found:
+            
+            # Remove entries from the firm_cert_questions list once they're found
+            if firm_cert_questions:
+                firm_cert_info = parse_firm_certificate(seg_i, single_text, text_segs, firm_cert_questions)
+                if firm_cert_info:
+                    value, answer = firm_cert_info.popitem()
+                    this_answer = {f"Firm Certification Q{value}":answer}
+                    firm_cert_questions.pop(value)
+                    result.update(this_answer)
+                    continue                      
+            
+            # Remove entries from the prop_cert_questions list once they're found
+            if prop_cert_questions:
+                prop_cert_info = parse_proposal_certification(seg_i, single_text, text_segs, prop_cert_questions)
+                if prop_cert_info:
+                    value, answer = prop_cert_info.popitem()
+                    this_answer = {f"Proposal Certification Q{value}":answer}
+                    prop_cert_questions.pop(value)
+                    result.update(this_answer)
+                    continue         
+
+            # This safety info appears twice, once in the table of contents
+            #and once in the body
+            if safety_info_found < 2:
                 safety_info = parse_safety(seg_i, single_text, text_segs)
                 if safety_info:
-                    safety_info_found = True
+                    safety_info_found +=1
                     result.update(safety_info)
-
+                    continue                          
     #print(result)
+    if prop_cert_questions:
+        print(f"Couldn't find Proposal Certificate questions: {prop_cert_questions}")
+        result["Missing Proposal Certificate questions"] = list(prop_cert_questions.keys())
+    if firm_cert_questions:
+        print(f"Couldn't find Proposal Certificate questions: {firm_cert_questions}")
+        result["Missing Firm Certificate Questions"] = list(firm_cert_questions)
     return result
 # ==============================================================================
 def parse_budget(file_name,
@@ -276,7 +335,7 @@ def parse_budget(file_name,
     1. Budget within constraints
     2. Proposed duration
     3. Subcontractor Cost
-    4. TODO Total manpower (number of employees/workers)
+    4. TODO Total manpower (number of employees /workers)
     5. Travel costs
     """
     print("*"*80)
@@ -332,10 +391,12 @@ def parse_budget(file_name,
                         result["Total"] = total_proposal_cost
                         if total_proposal_cost > max_value:
                             print(f"WARNING! Proposed budget exceeds ${threshold}!")
+                        headings.remove(heading)
                         continue
                     
                     elif heading == "Proposed Base Duration (in months)":
                         result["Duration (Mo.)"] = single_text.split()[-1].strip()
+                        headings.remove(heading)
                         #print(single_text)
                     #print(text_segs[seg_i+1])
             #print(text)     
@@ -637,7 +698,8 @@ def main():
     start = time.time()
 
     for file_name in sorted(target_files):
-        prop_number = re.search(r"(\d{4})", file_name)
+        
+        prop_number = re.search(four_digits, file_name)
         if prop_number:
             prop_number = prop_number.group(1)
             #print(f"Proposal: {prop_number}")        
@@ -723,6 +785,10 @@ if __name__ == "__main__":
         import pytesseract
 
     print("Done loading modules")
+    safety_heading = re.compile("safety.*related.*deliverables")
+    some_digits = re.compile('\d{5,}')
+    four_digits = re.compile(r"(\d{4})")
+
     pd.set_option('display.width', 1000)
     pd.set_option('display.max_colwidth', 1000)
     # If you don't have tesseract executable in your PATH, include the following:
