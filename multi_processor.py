@@ -1,20 +1,15 @@
 """
-Parse AFWERX Proposals for required portions:
-1. Budget within constraints
-2. Proposed duration
-3. DAF customer and end-user (x2 signatures)
-4. TPOCs
-5. TODO White Paper
-6. Subcontractors cost
-7. TODO Total manpower (number of employees/workers)
-8. Travel costs
+Parse AFWERX Proposals for the following info an aggregate it in one .csv file:
+1. Firm Certificate Questions
+2. Proposal Certification Questions
+3. DAF customer and end-user info
+4. TPOC info
+5. Various budget line items
 """
 import argparse
 import os
 import sys
-
 from utils import is_directory, is_filename
-import sys
 
 ppt_loaded = False
 
@@ -51,7 +46,7 @@ def str2bool(this_string):
 # ==============================================================================
 def lower_str(x):
     """
-    Converts the provided string to a lowercase string.
+    Converts a provided argparse option string to a lowercase string.  
     """
     return x.lower()
 
@@ -84,63 +79,74 @@ def process_pdf_page_titles(file_name):
             print(text)    
 # ==============================================================================
 def parse_firm_certificate(seg_i, single_text, text_segs, firm_cert_questions):
+    """
+    Given a segment index, single line of text, list of text segments, 
+    and firm certificate questions 
+    (provided as a dictionary mapping question number to (partial) question text), 
+    check if this single line of text matches any of the firm certification 
+    questions.  If it matches any of them, parse the corresponding answer and 
+    return it as a {question number:question answer} dict.
 
+    If no match, return an emtpy dictionary: {}
+    """
     result = {}
     answer = ""
     for value, key in firm_cert_questions.items():
-        if key in single_text:  
-            if value == 6:
-                if key in single_text:
-                    text = text_segs[seg_i+1]
-                    result[value] = text.strip()      
+        if not key in single_text:  
+            continue 
 
-            if value in [7,8]:
-                if key in single_text:
-                    text = text_segs[seg_i+2]
-                    result[value] = text.strip()                        
-            
-            elif value in [10,11]:
-                result[value] = ""
-                text = text_segs[seg_i]
-                for index in range(10):
-                    if '[X]' in text:
-                        result[value] += text.strip() + '\n'
-                    text = text_segs[seg_i+index]
+        if value == 6:
+            if key in single_text:
+                text = text_segs[seg_i+1]
+                result[value] = text.strip()      
 
-            elif 101 == value:
-                result[value] = ""
-                text = text_segs[seg_i]
-                for index in range(10):
-                    if '[X]' in text:
-                        result[value] += text.strip() + '\n'
-                    text = text_segs[seg_i+index]             
+        elif value in [7,8]:
+            if key in single_text:
+                text = text_segs[seg_i+2]
+                result[value] = text.strip()                        
+        
+        elif value in [10,11]:
+            result[value] = ""
+            text = text_segs[seg_i]
+            for index in range(10):
+                if '[X]' in text:
+                    result[value] += text.strip() + '\n'
+                text = text_segs[seg_i+index]
 
-            elif 16 == value:
-                if key in single_text:
-                    index = -2
-                    while index < 8:
-                        answer = text_segs[seg_i+index].strip()
-                        # TODO clean this logic up
-                        if some_digits.search(answer) and not answer.endswith("pdf"):
-                            result = {value:answer}
-                            break
-                        index += 1               
-            else:
-                index = 1
-                while True:
+        elif 16 == value:
+            if key in single_text:
+                index = -2
+                while index < 8:
                     answer = text_segs[seg_i+index].strip()
-                    if answer:
+                    # TODO clean this logic up
+                    if some_digits.search(answer) and not answer.endswith("pdf"):
                         result = {value:answer}
                         break
-                    index += 1
-            
+                    index += 1               
+        else:
+            index = 1
+            while True:
+                answer = text_segs[seg_i+index].strip()
+                if answer:
+                    result = {value:answer}
+                    break
+                index += 1           
             break
 
     return result
 #             
 # ==============================================================================
 def parse_proposal_certification(seg_i, single_text, text_segs, prop_cert_questions):
+    """
+    Given a segment index, single line of text, list of text segments, 
+    and proposal certification questions 
+    (provided as a dictionary mapping question number to (partial) question text), 
+    check if this single line of text matches any of the firm certification 
+    questions.  If it matches any of them, parse the corresponding answer and 
+    return it as a {question number:question answer} dict.
 
+    If no match, return an emtpy dictionary: {}
+    """
     result = {}
     answer = ""
     for value, key in prop_cert_questions.items():
@@ -175,7 +181,8 @@ def parse_proposal_certification(seg_i, single_text, text_segs, prop_cert_questi
 
 def parse_safety(seg_i, single_text, text_segs):
     """
-    Parse the "Safety Related Deliverables" section
+    Parse the "Safety Related Deliverables" section, returning all paragraphs
+    under that heading.
     """
     start_number = 0
     result = ""
@@ -227,9 +234,9 @@ def parse_safety(seg_i, single_text, text_segs):
 # ==============================================================================
 def parse_all_forms(file_name):
     """
-    Parse all relevant fields from all
+    Parse all relevant fields from the all_forms files, e.g.
+    F2D-1234_All_forms_proposal_package.pdf
     """
-    print("*"*80)
     print(f"Parsing all forms: {file_name}")
 
     prop_cert_questions = {
@@ -331,25 +338,23 @@ def parse_budget(file_name,
                  max_value=1250000,
                  keyphrase="Total Dollar Amount for this Proposal"):
     """
-    Parse all relevant fields from budget
-    1. Budget within constraints
-    2. Proposed duration
-    3. Subcontractor Cost
-    4. TODO Total manpower (number of employees /workers)
-    5. Travel costs
+    Parse all relevant fields from budget (see lists below)
+
+    Why make a separate function here when I could parse it from the 
+    all_forms file? Because the budget file is much smaller, so it *should be* 
+    faster to search for the budget info.  I think.
+    # TODO Verify the above with emperical testing.
     """
-    print("*"*80)
     print(f"Parsing budget: {file_name}")
     summed_costs = defaultdict(float)
     sumable_headings =   [
-        "Total Direct Travel Costs (TDT)", # This may appear multiple times, add    
+        "Total Direct Travel Costs (TDT)", 
         "Total Direct Material Costs (TDM)",
         "Total Subcontractor Costs (TSC)",
         "Total Direct Supplies Costs (TDS)",
         "Total Direct Equipment Costs (TDE)",
         "Total Other Direct Costs (TODC)",
         "Total Direct Labor (TDL)",
-
     ]
     headings = [
         "Total Dollar Amount for this Proposal",
@@ -429,7 +434,7 @@ def get_total_budget(file_name,
                     break
     return {"Total Proposal Value" :budget_float}
 # ==============================================================================
-def process_pdf_sigs_fitz2(file_name):
+def process_pdf_sigs_fitz(file_name):
     """
     Print info about digital signatures, as well as text and surrounding
     text containing any of the key phrases defined below
@@ -482,69 +487,6 @@ def process_pdf_sigs_fitz2(file_name):
                         continue
     return result
 # ==============================================================================
-def process_pdf_sigs_fitz(file_name):
-    """
-    Print info about digital signatures, as well as text and surrounding
-    text containing any of the key phrases defined below
-    """
-    #print(file_name)
-    got_text = False
-    result = defaultdict(str)
-
-    with fitz.open(file_name) as doc:
-        # Iterate over every page in the doc
-        for page in doc:
-            text_segs = page.get_text().split('\n')
-            text_segs = [text.strip() for text in text_segs if text]
-            if not text_segs:
-                continue
-            got_text = True
-            #print(text_segs)
-            # Iterate over every text field
-            for seg_i, single_text in enumerate(text_segs):
-                for key_phrase in key_phrases:
-                    if key_phrase in ["DAF End-User", "DAF Customer"]:
-                        if single_text == key_phrase:
-                            for x in text_segs[seg_i:seg_i+2]:
-                                result[key_phrase] += x + '\n'
-                                #print(x)
-                            continue
-                    # Remove the .lower() below for more stringent checking
-                    #if key_phrase.lower() in single_text.lower():
-                    if key_phrase in single_text:
-
-                        if "TPOC" in key_phrase:
-                            result[key_phrase] += single_text + "\n"
-                            print(single_text)
-
-                        elif key_phrase == "Digitally signed by":
-                            print(f"Found {key_phrase}------------------------")
-                            #for x in text_segs[seg_i:seg_i+5][::2]:
-                            for x in text_segs[seg_i+1:seg_i+3]:
-                                if ':' in x:
-                                    break
-                                result[key_phrase] += x + '\n'
-                                print(x)
-                            print(f"------------------------------------------")
-                            seg_i += 5
-                            break       
-                        
-                        else:
-
-                            #for x in text_segs[seg_i:seg_i+5][::2]:
-                            for x in text_segs[seg_i:seg_i+5]:
-                                result[key_phrase] += x + '\n'
-                                print(x)
-                            print(f"------------------------------------------")
-                            seg_i += 5
-                            break
-
-    if not got_text:
-        print("Failed to get text with fitz parser")
-
-    return result
-
-# ==============================================================================
 def ocr_cleanup(open_file_handle, open_file_name, files_to_remove):
     """
     Clean up artifacts of OCR - temp files & open file handles
@@ -556,12 +498,16 @@ def ocr_cleanup(open_file_handle, open_file_name, files_to_remove):
         open_file_handle.close()
     if open_file_name:
         os.remove(open_file_name)
-
 # ==============================================================================
 def ocr_pdf(file_name):
     """
+    #TODO Don't parse the digital signature section, rather, 
+    parse the paragraph headings instead as in process_pdf_sigs_fitz()
+
+    Use optical character recognition to parse scanned PDFs
     https://www.geeksforgeeks.org/python-reading-contents-of-pdf-using-ocr-optical-character-recognition/
     """
+    process_pdf_sigs_fitz
     print(f"OCR'ing {file_name}.  This could take a minute.")
     # Counter to store images of each page of PDF to image
     image_counter = 1
@@ -611,6 +557,12 @@ def ocr_pdf(file_name):
     ocr_cleanup(f, outfile, files_to_remove)            
 # ==============================================================================
 def parse_file(file_name, prop_number, ocr_flag):
+    """
+    Called by main(): this is the top level function for processing any file.
+    Having one top-level function in this fashion allows for easy parallelization
+    with a multiprocessing Pool later, once all other optimizations are complete.
+    # TODO Call this in parallel.
+    """
     #print("-"*80)
     #print(file_name)
     sig_dict = {}
@@ -624,7 +576,6 @@ def parse_file(file_name, prop_number, ocr_flag):
     else:
         #process_pdf_page_titles(file_name)
         if "all_forms" in file_name.lower():
-            print(file_name)
             file_info = parse_all_forms(file_name)
             sig_dict.update(file_info)
             if not file_info:
@@ -633,7 +584,6 @@ def parse_file(file_name, prop_number, ocr_flag):
                 else:
                     print(f"Can't parse {file_name}; Consider enabling OCR with -o True")            
         if "budget" in file_name.lower():
-            print(file_name)
             file_info = parse_budget(file_name)
             sig_dict.update(file_info)        
             #sig_dict.update(get_total_budget(file_name))
@@ -643,7 +593,7 @@ def parse_file(file_name, prop_number, ocr_flag):
                 else:
                     print(f"Can't parse {file_name}; Consider enabling OCR with -o True")        
         # Try to get signatures and TPOC data from this PDF
-        sig_dict.update(process_pdf_sigs_fitz2(file_name))
+        sig_dict.update(process_pdf_sigs_fitz(file_name))
 
     for k in sig_dict.keys():
         try:
@@ -652,14 +602,28 @@ def parse_file(file_name, prop_number, ocr_flag):
             pass
     return sig_dict
 # ==============================================================================
-
 #https://www.tutorialspoint.com/How-to-correctly-sort-a-string-with-a-number-inside-in-Python
 def atoi(text):
+    """
+    Helper function for sorting strings with numbers within them
+    """
     return int(text) if text.isdigit() else text
+#==============================================================================   
+#https://www.tutorialspoint.com/How-to-correctly-sort-a-string-with-a-number-inside-in-Python
 def natural_keys(text):
+    """
+    Helper function #2 for sorting strings with numbers within them
+    """    
     return [ atoi(c) for c in re.split('(\d+)',text) ]
-
+#==============================================================================
 def main():
+    """
+    Create a list of files as provided by -f and -d flags.  
+    Will recursively traverse all -d directories keeping files whose names 
+    include all terms specified by the -k options.
+
+    Write results to args.out
+    """
     target_files = set()
     dirs = []
 
@@ -679,7 +643,8 @@ def main():
         else:
             print(f"Skipping {file_name} with extension {file_extension}")
 
-    # Count the total number of files to be parsed.
+    # Count the total number of files to be parsed by recursively walking
+    # all provided directories.
     total_files = len(target_files)
     for source_dir in dirs:
         for (root, _, files) in os.walk(source_dir):
@@ -696,7 +661,7 @@ def main():
 
     # Here is the serial (non-parallel) approach.  Slow, but it works.
     start = time.time()
-
+    # TODO Parallelize
     for file_name in sorted(target_files):
         
         prop_number = re.search(four_digits, file_name)
@@ -719,7 +684,7 @@ def main():
 
     results.index.name = "Proposal ID"
     pprint.pprint(results.T)
-    results.to_csv("proposals.csv")
+    results.to_csv(args.out)
 # ==============================================================================
 if __name__ == "__main__":
 
@@ -754,6 +719,12 @@ if __name__ == "__main__":
                         help="Use OCR (Slower, but can parse scanned PDFs)"
                         )
 
+    parser.add_argument('--out',                       
+                        type=str,
+                        default="proposals.csv",
+                        help="Save results to this file (will be a csv.)"
+                        )                        
+
     args = parser.parse_args()
 
     if not args.file and not args.directory:
@@ -770,13 +741,13 @@ if __name__ == "__main__":
     import re
     import math
 
-    print("Loading pandas and collections")
+    print("Loading pandas and collections modules")
     import pandas as pd
-    #from IPython.display import display, HTML
-
     from collections import defaultdict
-    #from pptx import Presentation
-    print("Loading fitz")
+
+    # Note: the PPT module is lazily loaded in main()
+
+    print("Loading fitz (pdf module)")
     import fitz
     if args.ocr:
         print("Loading OCR modules...")
@@ -798,6 +769,5 @@ if __name__ == "__main__":
     ppt_extensions = ["ppt", "pptx"]
     valid_extensions = ppt_extensions + ["pdf"]
 
-    original_dir = os.getcwd()
     # args is global so no need to pass it
     slide = main()
