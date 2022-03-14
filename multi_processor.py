@@ -44,7 +44,7 @@ def str2bool(this_string):
 # ==============================================================================
 def lower_str(x):
     """
-    Converts a provided argparse option string to a lowercase string.  
+    Converts a provided argparse option string to a lowercase string.
     """
     return x.lower()
 
@@ -67,21 +67,21 @@ def process_ppt(file_name):
 def process_pdf_page_titles(file_name):
     """
     Prints the title of every page (intended for slides in pdf format)
-    """    
+    """
     text = ''
     with fitz.open(file_name ) as doc:
         for page_count, page in enumerate(doc):
-            #print(f"{page_count}".center(80,"-"))            
+            #print(f"{page_count}".center(80,"-"))
             text = page.get_text().split('\n')[0]
-            print(text)    
+            print(text)
 # ==============================================================================
 def parse_firm_certificate(seg_i, single_text, text_segs, firm_cert_questions):
     """
-    Given a segment index, single line of text, list of text segments, 
-    and firm certificate questions 
-    (provided as a dictionary mapping question number to (partial) question text), 
-    check if this single line of text matches any of the firm certification 
-    questions.  If it matches any of them, parse the corresponding answer and 
+    Given a segment index, single line of text, list of text segments,
+    and firm certificate questions
+    (provided as a dictionary mapping question number to (partial) question text),
+    check if this single line of text matches any of the firm certification
+    questions.  If it matches any of them, parse the corresponding answer and
     return it as a {question number:question answer} dict.
 
     If no match, return an emtpy dictionary: {}
@@ -89,19 +89,19 @@ def parse_firm_certificate(seg_i, single_text, text_segs, firm_cert_questions):
     result = {}
     answer = ""
     for value, key in firm_cert_questions.items():
-        if not key in single_text:  
-            continue 
+        if not key in single_text:
+            continue
 
         if value == 6:
             if key in single_text:
                 text = text_segs[seg_i+1]
-                result[value] = text.strip()      
+                result[value] = text.strip()
 
         elif value in [7,8]:
             if key in single_text:
                 text = text_segs[seg_i+2]
-                result[value] = text.strip()                        
-        
+                result[value] = text.strip()
+
         elif value in [10,11]:
             result[value] = ""
             text = text_segs[seg_i]
@@ -119,7 +119,7 @@ def parse_firm_certificate(seg_i, single_text, text_segs, firm_cert_questions):
                     if some_digits.search(answer) and not answer.endswith("pdf"):
                         result = {value:answer}
                         break
-                    index += 1               
+                    index += 1
         else:
             index = 1
             while True:
@@ -127,7 +127,7 @@ def parse_firm_certificate(seg_i, single_text, text_segs, firm_cert_questions):
                 if answer:
                     result = {value:answer}
                     break
-                index += 1           
+                index += 1
             break
 
     return result
@@ -135,11 +135,11 @@ def parse_firm_certificate(seg_i, single_text, text_segs, firm_cert_questions):
 # ==============================================================================
 def parse_proposal_certification(seg_i, single_text, text_segs, prop_cert_questions):
     """
-    Given a segment index, single line of text, list of text segments, 
-    and proposal certification questions 
-    (provided as a dictionary mapping question number to (partial) question text), 
-    check if this single line of text matches any of the firm certification 
-    questions.  If it matches any of them, parse the corresponding answer and 
+    Given a segment index, single line of text, list of text segments,
+    and proposal certification questions
+    (provided as a dictionary mapping question number to (partial) question text),
+    check if this single line of text matches any of the firm certification
+    questions.  If it matches any of them, parse the corresponding answer and
     return it as a {question number:question answer} dict.
 
     If no match, return an emtpy dictionary: {}
@@ -159,9 +159,9 @@ def parse_proposal_certification(seg_i, single_text, text_segs, prop_cert_questi
                         answer = text.strip()
                         if answer.lower() in ["yes", "no"]:
                             break
-            else:  
+            else:
                 index = 1
-                while index < 8:  
+                while index < 8:
                     answer = text_segs[seg_i+index].strip()
                     if answer:
                         break
@@ -203,27 +203,27 @@ def parse_safety(seg_i, single_text, text_segs):
 
     # Keep up to 100 lines that follow, searching for the next section, e.g.
     #  the next number, e.g.
-    # 2.8 Other Deliverables 
+    # 2.8 Other Deliverables
     # 3. Next section
     # Stop when this next section is found
-    # TODO How many lines to get?  4? 10? 
+    # TODO How many lines to get?  4? 10?
     for i in range(4):
         try:
             number_str = text_segs[seg_i+i].split()[0].rstrip('.')
             new_number = float(number_str)
             delta = math.floor(new_number) - math.floor(start_number)
             if delta >= 1 or not number_str.startswith(str(start_number)):
-                break   
+                break
         except ValueError as e:
             #print("Error", e)
             pass
         result += text_segs[seg_i+i] + '\n'
-        #print(text_segs[seg_i+i])   
+        #print(text_segs[seg_i+i])
 
     if result:
         return {"Safety-Related Deliverables": result}
-    else:
-        return {}
+
+    return {}
 # ==============================================================================
 def parse_questions(file_name):
     """
@@ -272,7 +272,7 @@ def parse_questions(file_name):
         16: "Supporting Documentation:",
         17: "firm owned or managed by a corporate entity?",
         18: "Is your firm affiliated as set forth in 13 CFR ??121.103?"
-    }    
+    }
 
     duration = "Proposed Base Duration (in months)"
 
@@ -291,7 +291,7 @@ def parse_questions(file_name):
         for seg_i, single_text in enumerate(text_segs):
             if not single_text:
                 continue
-            
+
             # Remove entries from the firm_cert_questions list once they're found
             if firm_cert_questions:
                 firm_cert_info = parse_firm_certificate(seg_i, single_text, text_segs, firm_cert_questions)
@@ -300,8 +300,8 @@ def parse_questions(file_name):
                     this_answer = {f"Firm Certification Q{value}":answer}
                     firm_cert_questions.pop(value)
                     result.update(this_answer)
-                    continue                      
-            
+                    continue
+
             # Remove entries from the prop_cert_questions list once they're found
             if prop_cert_questions:
                 prop_cert_info = parse_proposal_certification(seg_i, single_text, text_segs, prop_cert_questions)
@@ -310,7 +310,7 @@ def parse_questions(file_name):
                     this_answer = {f"Proposal Certification Q{value}":answer}
                     prop_cert_questions.pop(value)
                     result.update(this_answer)
-                    continue         
+                    continue
 
             # This safety info appears twice, once in the table of contents
             #and once in the body
@@ -319,11 +319,11 @@ def parse_questions(file_name):
                 if safety_info:
                     safety_info_found +=1
                     result.update(safety_info)
-                    continue      
+                    continue
 
             if duration and duration.lower() in single_text.lower():
                 result["Duration (Mo.)"] = single_text.split()[-1].strip()
-                duration = False            
+                duration = False
 
     #print(result)
     if prop_cert_questions:
@@ -340,15 +340,15 @@ def parse_budget(file_name,
     """
     Parse all relevant fields from budget (see lists below)
 
-    Why make a separate function here when I could parse it from the 
-    all_forms file? Because the budget file is much smaller, so it *should be* 
+    Why make a separate function here when I could parse it from the
+    all_forms file? Because the budget file is much smaller, so it *should be*
     faster to search for the budget info.  I think.
     # TODO Verify the above with imperical testing.
     """
     print(f"Parsing budget: {file_name}")
     summed_costs = defaultdict(float)
     sumable_headings =   [
-        "Total Direct Travel Costs (TDT)", 
+        "Total Direct Travel Costs (TDT)",
         "Total Direct Material Costs (TDM)",
         "Total Subcontractor Costs (TSC)",
         "Total Direct Supplies Costs (TDS)",
@@ -356,7 +356,7 @@ def parse_budget(file_name,
         "Total Other Direct Costs (TODC)",
         "Total Direct Labor (TDL)",
     ]
-    total_heading = "Total Dollar Amount for this Proposal"        
+    total_heading = "Total Dollar Amount for this Proposal"
     text_segs = []
     total_proposal_cost = 0
     unique_costs = set()
@@ -376,7 +376,7 @@ def parse_budget(file_name,
                     cost_float = float(cost_str.lstrip('$').replace(",",""))
                     if not cost_float or cost_float not in unique_costs:
                         unique_costs.add(cost_float)
-                        summed_costs[heading] += cost_float   
+                        summed_costs[heading] += cost_float
 
             if total_heading:
                 if total_heading.lower() in single_text.lower():
@@ -390,11 +390,11 @@ def parse_budget(file_name,
                         print(f"WARNING! Proposed budget exceeds ${max_value}!")
                     total_heading = False
                     continue
-                    
+
 
                         #print(single_text)
                     #print(text_segs[seg_i+1])
-            #print(text)     
+            #print(text)
     #pprint.pprint(summed_costs)
     result.update(summed_costs)
     #print(result)
@@ -441,8 +441,6 @@ def process_pdf_sigs_fitz(file_name):
 
         # Iterate over every page in the doc
         for pi, page in enumerate(doc):
-            if not headers:
-                break
             text_segs = page.get_text().split('\n')
             #text_segs = [text.strip() for text in text_segs if text.strip()]
             if not text_segs:
@@ -469,15 +467,16 @@ def process_pdf_sigs_fitz(file_name):
                                 result[key_phrase] += x + '\n'
                                 #print(x)
 
-                            index +=1 
+                            index +=1
                             if x.rstrip().endswith(","):
                                 continue
                             if count > 2 or index > 10:
                                 break
 
                         headers.remove(key_phrase)
-
-                        continue            
+                        if not headers:
+                            return result
+                        continue
     return result
 # ==============================================================================
 def ocr_cleanup(open_file_handle, open_file_name, files_to_remove):
@@ -494,7 +493,7 @@ def ocr_cleanup(open_file_handle, open_file_name, files_to_remove):
 # ==============================================================================
 def ocr_pdf(file_name):
     """
-    #TODO Don't parse the digital signature section, rather, 
+    #TODO Don't parse the digital signature section, rather,
     parse the paragraph headings instead as in process_pdf_sigs_fitz()
 
     Use optical character recognition to parse scanned PDFs
@@ -546,7 +545,7 @@ def ocr_pdf(file_name):
                     #ocr_cleanup(f, outfile, files_to_remove)
                     #return[0]
             #print(text)
-    ocr_cleanup(f, outfile, files_to_remove)            
+    ocr_cleanup(f, outfile, files_to_remove)
 # ==============================================================================
 def parse_file(file_name, prop_number, ocr_flag):
     """
@@ -578,12 +577,12 @@ def parse_file(file_name, prop_number, ocr_flag):
                 if not sig_dict and ocr_flag:
                     ocr_pdf(file_name)
                 else:
-                    print(f"Can't parse {file_name}; Consider enabling OCR with -o True")        
+                    print(f"Can't parse {file_name}; Consider enabling OCR with -o True")
         #if "budget" in file_name:
 
         if args.budget_file.lower() in file_name.lower():
             file_info = parse_budget(file_name, args.max_value)
-            sig_dict.update(file_info)        
+            sig_dict.update(file_info)
             #sig_dict.update(get_total_budget(file_name))
             if not file_info:
                 if not sig_dict and ocr_flag:
@@ -602,7 +601,7 @@ def parse_file(file_name, prop_number, ocr_flag):
     for k in sig_dict.keys():
         try:
             sig_dict[k] = sig_dict[k].strip()
-        except AttributeError as e:
+        except AttributeError:
             pass
     return sig_dict
 # ==============================================================================
@@ -612,18 +611,18 @@ def atoi(text):
     Helper function for sorting strings with numbers within them
     """
     return int(text) if text.isdigit() else text
-#==============================================================================   
+#==============================================================================
 #https://www.tutorialspoint.com/How-to-correctly-sort-a-string-with-a-number-inside-in-Python
 def natural_keys(text):
     """
     Helper function #2 for sorting strings with numbers within them
-    """    
-    return [atoi(c) for c in re.split('(\d+)',text)]
+    """
+    return [atoi(c) for c in re.split('(\d+)', text)]
 #==============================================================================
 def main():
     """
-    Create a list of files as provided by -f and -d flags.  
-    Will recursively traverse all -d directories keeping files whose names 
+    Create a list of files as provided by -f and -d flags.
+    Will recursively traverse all -d directories keeping files whose names
     include all terms specified by the -k options.
 
     Write results to args.out
@@ -649,7 +648,6 @@ def main():
 
     # Count the total number of files to be parsed by recursively walking
     # all provided directories.
-    total_files = len(target_files)
     for source_dir in dirs:
         for (root, _, files) in os.walk(source_dir):
             for file_name in files:
@@ -667,11 +665,11 @@ def main():
     start = time.time()
     # TODO Parallelize
     for file_name in sorted(target_files):
-        
+
         prop_number = re.search(four_digits, file_name)
         if prop_number:
             prop_number = prop_number.group(1)
-            #print(f"Proposal: {prop_number}")        
+            #print(f"Proposal: {prop_number}")
             file_info = parse_file(file_name, prop_number, args.ocr)
             if file_info:
                 all_info[prop_number].update(file_info)
@@ -681,7 +679,7 @@ def main():
     print(f"{len(target_files)} files in {end-start} seconds")
 
     results = pd.DataFrame.from_dict(all_info, orient="index")
-    
+
     sorted_cols = results.columns.tolist()
     sorted_cols.sort(key=natural_keys)
 
@@ -699,19 +697,19 @@ if __name__ == "__main__":
         formatter_class=argparse.ArgumentDefaultsHelpFormatter)
 
     parser.add_argument('--budget-file',
-                        '-b',                       
+                        '-b',
                         type=str,
                         default="budget",
                         help="Will parse files with this keyword as budget documents"
-                        ) 
+                        )
 
     parser.add_argument('--questions-file',
-                        '-q',                       
+                        '-q',
                         type=str,
                         default="all_forms",
                         action="append",
                         help="Will parse files with this keyword for duration and firm+proposal questions"
-                        ) 
+                        )
 
     parser.add_argument('--file',
                         '-f',
@@ -739,11 +737,11 @@ if __name__ == "__main__":
                         help="Use OCR (Slower, but can parse scanned PDFs)"
                         )
 
-    parser.add_argument('--out',                       
+    parser.add_argument('--out',
                         type=str,
                         default="proposals.csv",
                         help="Save results to this file (will be a csv.)"
-                        )                        
+                        )
     parser.add_argument('--max-value',
                         '-m',
                         type=int,
@@ -758,9 +756,9 @@ if __name__ == "__main__":
         sys.exit(1)
 
     # Invocation correct; now load modules
-    # Otherwise you force the user to wait for them to load, 
+    # Otherwise you force the user to wait for them to load,
     # then tell them the invocation is incorrect, what a waste of time.
-    
+
     print("Invocation correct, loading standard modules")
     import pprint
     import time
