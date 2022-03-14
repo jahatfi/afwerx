@@ -280,7 +280,7 @@ def parse_questions(file_name):
     safety_info_found = 0
     result = {}
     answer = ""
-    with fitz.open(file_name ) as doc:
+    with fitz.open(file_name) as doc:
         for page_i, page in enumerate(doc):
             #print(f"{page_count}".center(80,"-"))
             text_segs += page.get_text().split('\n')
@@ -505,7 +505,6 @@ def ocr_pdf(file_name):
     Use optical character recognition to parse scanned PDFs
     https://www.geeksforgeeks.org/python-reading-contents-of-pdf-using-ocr-optical-character-recognition/
     """
-    process_pdf_sigs_fitz
     print(f"OCR'ing {file_name}.  This could take a minute.")
     # Counter to store images of each page of PDF to image
     image_counter = 1
@@ -565,12 +564,15 @@ def parse_file(file_name, prop_number, ocr_flag):
     #print(file_name)
     sig_dict = {}
     file_info = {}
-
+    poc_info = {}
     file_extension = file_name.split(".")[-1]
 
+    # Process PowerPoint files
     if file_extension in ppt_extensions:
         process_ppt(file_name)
         #total_files +=1
+
+    # All others are PDFs
     else:
         #process_pdf_page_titles(file_name)
         #if any(keyword in file_name.lower() for keyword in args.questions_file):
@@ -592,9 +594,15 @@ def parse_file(file_name, prop_number, ocr_flag):
                 if not sig_dict and ocr_flag:
                     ocr_pdf(file_name)
                 else:
-                    print(f"Can't parse {file_name}; Consider enabling OCR with -o True")        
+                    print(f"Can't parse {file_name}; Consider enabling OCR with -o True")
+
         # Try to get signatures and TPOC data from this PDF
-        sig_dict.update(process_pdf_sigs_fitz(file_name))
+        # If all 3 POCs haven't yet been found, search this file for them
+        if len(poc_info) < 3:
+            poc_info = process_pdf_sigs_fitz(file_name)
+            if poc_info:
+                #print(f"Found POC info in  {file_name}")
+                sig_dict.update(poc_info)
 
     for k in sig_dict.keys():
         try:
