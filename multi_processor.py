@@ -690,7 +690,8 @@ def main():
 if __name__ == "__main__":
 
     # Create the parser and add arguments
-    parser = argparse.ArgumentParser()
+    parser = argparse.ArgumentParser(
+        formatter_class=argparse.ArgumentDefaultsHelpFormatter)
 
     # Add an optional argument for the output file,
     # open in 'write' mode and and specify encoding
@@ -707,7 +708,7 @@ if __name__ == "__main__":
                         type=str,
                         default="all_forms",
                         action="append",
-                        help="Will parse files with this keyword for firm and proposal question"
+                        help="Will parse files with this keyword for duration and firm+proposal questions"
                         ) 
 
     parser.add_argument('--file',
