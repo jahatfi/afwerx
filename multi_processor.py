@@ -335,7 +335,7 @@ def parse_questions(file_name):
     return result
 # ==============================================================================
 def parse_budget(file_name,
-                 max_value=1250000,
+                 max_value,
                  keyphrase="Total Dollar Amount for this Proposal"):
     """
     Parse all relevant fields from budget (see lists below)
@@ -343,7 +343,7 @@ def parse_budget(file_name,
     Why make a separate function here when I could parse it from the 
     all_forms file? Because the budget file is much smaller, so it *should be* 
     faster to search for the budget info.  I think.
-    # TODO Verify the above with emperical testing.
+    # TODO Verify the above with imperical testing.
     """
     print(f"Parsing budget: {file_name}")
     summed_costs = defaultdict(float)
@@ -358,14 +358,9 @@ def parse_budget(file_name,
     ]
     total_heading = "Total Dollar Amount for this Proposal"        
     text_segs = []
-    unique_ts_costs = set()
-    ts_cost = 0
-    total_travel_cost = 0
     total_proposal_cost = 0
     unique_costs = set()
     result = {}
-    answer = ""
-    threshold = "$"+str(max_value/1000000)+"M"
     with fitz.open(file_name ) as doc:
         for page in doc:
             #print(f"{page_count}".center(80,"-"))
@@ -385,16 +380,16 @@ def parse_budget(file_name,
 
             if total_heading:
                 if total_heading.lower() in single_text.lower():
-                    if heading == "Total Dollar Amount for this Proposal":
-                        #print(single_text)
-                        budget_str = text_segs[seg_i+1]
-                        #print(budget_str)
-                        total_proposal_cost = float(budget_str.lstrip('$').replace(",",""))
-                        result["Total"] = total_proposal_cost
-                        if total_proposal_cost > max_value:
-                            print(f"WARNING! Proposed budget exceeds ${threshold}!")
-                        total_heading = False
-                        continue
+                    #print(single_text)
+                    budget_str = text_segs[seg_i+1]
+                    #print(budget_str)
+                    total_proposal_cost = float(budget_str.lstrip('$').replace(",",""))
+                    result["Total"] = total_proposal_cost
+                    print(result)
+                    if total_proposal_cost > max_value:
+                        print(f"WARNING! Proposed budget exceeds ${max_value}!")
+                    total_heading = False
+                    continue
                     
 
                         #print(single_text)
@@ -431,7 +426,7 @@ def get_total_budget(file_name,
 # ==============================================================================
 def process_pdf_sigs_fitz(file_name):
     """
-    Print info about digital signatures, as well as text and surrounding
+    Print info about POC info, as well as text and surrounding
     text containing any of the key phrases defined below
     """
     print(file_name)
@@ -489,7 +484,7 @@ def ocr_cleanup(open_file_handle, open_file_name, files_to_remove):
     """
     Clean up artifacts of OCR - temp files & open file handles
     """
-    print("Removing")
+    print(f"Removing OCR artifacts related to {open_file_name}")
     for file_name_to_remove in files_to_remove:
         os.remove(file_name_to_remove)
     if open_file_handle:
@@ -587,7 +582,7 @@ def parse_file(file_name, prop_number, ocr_flag):
         #if "budget" in file_name:
 
         if args.budget_file.lower() in file_name.lower():
-            file_info = parse_budget(file_name)
+            file_info = parse_budget(file_name, args.max_value)
             sig_dict.update(file_info)        
             #sig_dict.update(get_total_budget(file_name))
             if not file_info:
@@ -623,7 +618,7 @@ def natural_keys(text):
     """
     Helper function #2 for sorting strings with numbers within them
     """    
-    return [ atoi(c) for c in re.split('(\d+)',text) ]
+    return [atoi(c) for c in re.split('(\d+)',text)]
 #==============================================================================
 def main():
     """
@@ -684,14 +679,16 @@ def main():
 
     end = time.time()
     print(f"{len(target_files)} files in {end-start} seconds")
+
     results = pd.DataFrame.from_dict(all_info, orient="index")
     
     sorted_cols = results.columns.tolist()
     sorted_cols.sort(key=natural_keys)
 
+    # Sort columns in dataframe by name (alphanumerically)
     results = results[sorted_cols]
-
     results.index.name = "Proposal ID"
+    # Print and save resulting table
     pprint.pprint(results)
     results.to_csv(args.out)
 # ==============================================================================
@@ -700,9 +697,6 @@ if __name__ == "__main__":
     # Create the parser and add arguments
     parser = argparse.ArgumentParser(
         formatter_class=argparse.ArgumentDefaultsHelpFormatter)
-
-    # Add an optional argument for the output file,
-    # open in 'write' mode and and specify encoding
 
     parser.add_argument('--budget-file',
                         '-b',                       
@@ -750,6 +744,12 @@ if __name__ == "__main__":
                         default="proposals.csv",
                         help="Save results to this file (will be a csv.)"
                         )                        
+    parser.add_argument('--max-value',
+                        '-m',
+                        type=int,
+                        default=1250000,
+                        help="Max dollar value for proposals.  Will print warning if value is exceeded"
+                        )
 
     args = parser.parse_args()
 
@@ -782,6 +782,8 @@ if __name__ == "__main__":
         import pytesseract
 
     print("Done loading modules")
+
+    # Pre-compile re expressions
     safety_heading = re.compile("safety.*related.*deliverables")
     some_digits = re.compile('\d{5,}')
     four_digits = re.compile(r"(\d{4})")
