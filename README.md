@@ -20,16 +20,22 @@ So far it can:
 ### Combine keywords filters (-k foo -k bar) to process only files that contain "foo" AND "bar"
 
 ```bash
-python multi_processor.py --help
-usage: multi_processor.py [-h] [--file FILE] [--directory DIRECTORY] [--keyword KEYWORD]
+python  multi_processor.py -h
+usage: multi_processor.py [-h] [--budget-file BUDGET_FILE] [--questions-file QUESTIONS_FILE] [--file FILE] [--directory DIRECTORY] [--keyword KEYWORD] [--ocr OCR] [--out OUT]
 
 optional arguments:
   -h, --help            show this help message and exit
-  --file FILE, -f FILE  Files to parse. Must be pdf/ppt/pptx
+  --budget-file BUDGET_FILE, -b BUDGET_FILE
+                        Will parse files with this keyword as budget documents (default: budget)
+  --questions-file QUESTIONS_FILE, -q QUESTIONS_FILE
+                        Will parse files with this keyword for duration and firm+proposal questions (default: all_forms)
+  --file FILE, -f FILE  Files to parse. Must be pdf/ppt/pptx (default: None)
   --directory DIRECTORY, -d DIRECTORY
-                        Directories to search for files to parse
+                        Directories to search for files to parse (default: None)
   --keyword KEYWORD, -k KEYWORD
-                        Parse only filenames containing ALL of these keywords
+                        Parse only filenames containing ALL these keywords (default: None)
+  --ocr OCR, -o OCR     Use OCR (Slower, but can parse scanned PDFs) (default: False)
+  --out OUT             Save results to this file (will be a csv.) (default: proposals.csv)
 ```
 ### Examples
 Process only proposal #1234
