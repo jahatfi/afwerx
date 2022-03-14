@@ -11,8 +11,6 @@ import os
 import sys
 from utils import is_directory, is_filename
 
-ppt_loaded = False
-
 # TODO Update with mandatory sections, then check for their presence
 sections = [
     "Method",
@@ -55,11 +53,10 @@ def process_ppt(file_name):
     """
     Prints the title of every slide
     """
-    if not ppt_loaded:
-        print("Loading pptx module...")
-        from pptx import Presentation
-        print("Done")
+    # Lazily load the pptx module - this will only execute once if needed at all
+    from pptx import Presentation
     prs = Presentation(file_name)
+
     for slide in prs.slides:
         try:
             title = slide.shapes.title.text
@@ -113,7 +110,7 @@ def parse_firm_certificate(seg_i, single_text, text_segs, firm_cert_questions):
                     result[value] += text.strip() + '\n'
                 text = text_segs[seg_i+index]
 
-        elif 16 == value:
+        elif value == 16:
             if key in single_text:
                 index = -2
                 while index < 8:
@@ -134,7 +131,7 @@ def parse_firm_certificate(seg_i, single_text, text_segs, firm_cert_questions):
             break
 
     return result
-#             
+
 # ==============================================================================
 def parse_proposal_certification(seg_i, single_text, text_segs, prop_cert_questions):
     """
@@ -162,9 +159,6 @@ def parse_proposal_certification(seg_i, single_text, text_segs, prop_cert_questi
                         answer = text.strip()
                         if answer.lower() in ["yes", "no"]:
                             break
-
-            #elif value in [7,8]:
-            #    print(text_segs[seg_i+1:seg_i+3])
             else:  
                 index = 1
                 while index < 8:  
@@ -175,7 +169,6 @@ def parse_proposal_certification(seg_i, single_text, text_segs, prop_cert_questi
 
             result = {value:answer}
         #print(result)
-        
     return result
 # ==============================================================================
 
@@ -213,7 +206,7 @@ def parse_safety(seg_i, single_text, text_segs):
     # 2.8 Other Deliverables 
     # 3. Next section
     # Stop when this next section is found
-    # TODO 
+    # TODO How many lines to get?  4? 10? 
     for i in range(4):
         try:
             number_str = text_segs[seg_i+i].split()[0].rstrip('.')
@@ -232,7 +225,7 @@ def parse_safety(seg_i, single_text, text_segs):
     else:
         return {}
 # ==============================================================================
-def parse_all_forms(file_name):
+def parse_questions(file_name):
     """
     Parse all relevant fields from the all_forms files, e.g.
     F2D-1234_All_forms_proposal_package.pdf
@@ -281,6 +274,8 @@ def parse_all_forms(file_name):
         18: "Is your firm affiliated as set forth in 13 CFR ??121.103?"
     }    
 
+    duration = "Proposed Base Duration (in months)"
+
     text_segs = []
     safety_info_found = 0
     result = {}
@@ -324,7 +319,12 @@ def parse_all_forms(file_name):
                 if safety_info:
                     safety_info_found +=1
                     result.update(safety_info)
-                    continue                          
+                    continue      
+
+            if duration and duration.lower() in single_text.lower():
+                result["Duration (Mo.)"] = single_text.split()[-1].strip()
+                duration = False            
+
     #print(result)
     if prop_cert_questions:
         print(f"Couldn't find Proposal Certificate questions: {prop_cert_questions}")
@@ -356,10 +356,7 @@ def parse_budget(file_name,
         "Total Other Direct Costs (TODC)",
         "Total Direct Labor (TDL)",
     ]
-    headings = [
-        "Total Dollar Amount for this Proposal",
-        "Proposed Base Duration (in months)",
-    ]
+    total_heading = "Total Dollar Amount for this Proposal"        
     text_segs = []
     unique_ts_costs = set()
     ts_cost = 0
@@ -386,8 +383,8 @@ def parse_budget(file_name,
                         unique_costs.add(cost_float)
                         summed_costs[heading] += cost_float   
 
-            for heading in headings:
-                if heading.lower() in single_text.lower():
+            if total_heading:
+                if total_heading.lower() in single_text.lower():
                     if heading == "Total Dollar Amount for this Proposal":
                         #print(single_text)
                         budget_str = text_segs[seg_i+1]
@@ -396,12 +393,10 @@ def parse_budget(file_name,
                         result["Total"] = total_proposal_cost
                         if total_proposal_cost > max_value:
                             print(f"WARNING! Proposed budget exceeds ${threshold}!")
-                        headings.remove(heading)
+                        total_heading = False
                         continue
                     
-                    elif heading == "Proposed Base Duration (in months)":
-                        result["Duration (Mo.)"] = single_text.split()[-1].strip()
-                        headings.remove(heading)
+
                         #print(single_text)
                     #print(text_segs[seg_i+1])
             #print(text)     
@@ -451,6 +446,8 @@ def process_pdf_sigs_fitz(file_name):
 
         # Iterate over every page in the doc
         for pi, page in enumerate(doc):
+            if not headers:
+                break
             text_segs = page.get_text().split('\n')
             #text_segs = [text.strip() for text in text_segs if text.strip()]
             if not text_segs:
@@ -484,7 +481,8 @@ def process_pdf_sigs_fitz(file_name):
                                 break
 
                         headers.remove(key_phrase)
-                        continue
+
+                        continue            
     return result
 # ==============================================================================
 def ocr_cleanup(open_file_handle, open_file_name, files_to_remove):
@@ -575,15 +573,18 @@ def parse_file(file_name, prop_number, ocr_flag):
         #total_files +=1
     else:
         #process_pdf_page_titles(file_name)
-        if "all_forms" in file_name.lower():
-            file_info = parse_all_forms(file_name)
+        #if any(keyword in file_name.lower() for keyword in args.questions_file):
+        if args.questions_file.lower() in file_name.lower():
+            file_info = parse_questions(file_name)
             sig_dict.update(file_info)
             if not file_info:
                 if not sig_dict and ocr_flag:
                     ocr_pdf(file_name)
                 else:
-                    print(f"Can't parse {file_name}; Consider enabling OCR with -o True")            
-        if "budget" in file_name.lower():
+                    print(f"Can't parse {file_name}; Consider enabling OCR with -o True")        
+        #if "budget" in file_name:
+
+        if args.budget_file.lower() in file_name.lower():
             file_info = parse_budget(file_name)
             sig_dict.update(file_info)        
             #sig_dict.update(get_total_budget(file_name))
@@ -683,7 +684,7 @@ def main():
     results = results[sorted_cols]
 
     results.index.name = "Proposal ID"
-    pprint.pprint(results.T)
+    pprint.pprint(results)
     results.to_csv(args.out)
 # ==============================================================================
 if __name__ == "__main__":
@@ -693,6 +694,22 @@ if __name__ == "__main__":
 
     # Add an optional argument for the output file,
     # open in 'write' mode and and specify encoding
+
+    parser.add_argument('--budget-file',
+                        '-b',                       
+                        type=str,
+                        default="budget",
+                        help="Will parse files with this keyword as budget documents"
+                        ) 
+
+    parser.add_argument('--questions-file',
+                        '-q',                       
+                        type=str,
+                        default="all_forms",
+                        action="append",
+                        help="Will parse files with this keyword for firm and proposal question"
+                        ) 
+
     parser.add_argument('--file',
                         '-f',
                         action='append',
