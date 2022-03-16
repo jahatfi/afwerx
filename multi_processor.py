@@ -6,98 +6,27 @@ Parse AFWERX Proposals for the following info an aggregate it in one .csv file:
 4. TPOC info
 5. Various budget line items
 """
-from collections import defaultdict
-import fitz
+# Modules imported here are required by the subprocesss.
+# Other modules not required by the subprocess are imported later after
 import re
-import math
+import sys
+import argparse
+
+from math import floor
+from os import walk, remove
+from collections import defaultdict
+
+import fitz
+
+from utils import is_directory, is_filename
+
 # Pre-compile re expressions
 safety_heading = re.compile("safety.*related.*deliverables")
 some_digits = re.compile('\d{5,}')
 four_digits = re.compile(r"(\d{4})")
 
 # ==============================================================================
-def parse_file(params):
-    """
-    Called by main(): this is the top level function for processing any file.
-    Having one top-level function in this fashion allows for easy parallelization
-    with a multiprocessing Pool later, once all other optimizations are complete.
-    # TODO Call this in parallel.
-    """
-    file_name, prop_number, ocr_flag, questions_file, budget_file, ppt_extensions, max_value = params
-    #print("-"*80)
-    #print(file_name)
-    sig_dict = {}
-    file_info = {}
-    poc_info = {}
-    file_extension = file_name.split(".")[-1]
 
-    # Process PowerPoint files
-    if file_extension in ppt_extensions:
-        process_ppt(file_name)
-        #total_files +=1
-
-    # All others are PDFs
-    else:
-        #process_pdf_page_titles(file_name)
-        #if any(keyword in file_name.lower() for keyword in args.questions_file):
-        if questions_file.lower() in file_name.lower():
-            file_info = parse_questions(file_name)
-            sig_dict.update(file_info)
-            if not file_info:
-                if not sig_dict and ocr_flag:
-                    ocr_pdf(file_name)
-                else:
-                    print(f"Can't parse {file_name}; Consider enabling OCR with -o True")
-        #if "budget" in file_name:
-
-        if budget_file.lower() in file_name.lower():
-            file_info = parse_budget(file_name, max_value)
-            sig_dict.update(file_info)
-            #sig_dict.update(get_total_budget(file_name))
-            if not file_info:
-                if not sig_dict and ocr_flag:
-                    ocr_pdf(file_name)
-                else:
-                    print(f"Can't parse {file_name}; Consider enabling OCR with -o True")
-
-        # Try to get signatures and TPOC data from this PDF
-        # If all 3 POCs haven't yet been found, search this file for them
-        if len(poc_info) < 3:
-            poc_info = process_pdf_sigs_fitz(file_name)
-            if poc_info:
-                #print(f"Found POC info in  {file_name}")
-                sig_dict.update(poc_info)
-
-    for k in sig_dict.keys():
-        try:
-            sig_dict[k] = sig_dict[k].strip()
-        except AttributeError:
-            pass
-    return {prop_number:sig_dict}
-#===============================================================================
-import argparse
-import os
-import sys
-from utils import is_directory, is_filename
-import multiprocessing as mp
-
-# TODO Update with mandatory sections, then check for their presence
-sections = [
-    "Method",
-    "Approach"
-]
-
-key_phrases = [
-    "DAF Customer",
-    "DAF End-User",
-    "Digitally signed by",
-    "TPOC:",
-    "TPOCs:",
-    "TPOCS:",
-    "Technical Point of Contact"
-]
-
-# ==============================================================================
 # Reference: https://stackoverflow.com/questions/15008758/parsing-boolean-values-with-argparse
 def str2bool(this_string):
     """
@@ -281,7 +210,7 @@ def parse_safety(seg_i, single_text, text_segs):
         try:
             number_str = text_segs[seg_i+i].split()[0].rstrip('.')
             new_number = float(number_str)
-            delta = math.floor(new_number) - math.floor(start_number)
+            delta = floor(new_number) - floor(start_number)
             if delta >= 1 or not number_str.startswith(str(start_number)):
                 break
         except ValueError as e:
@@ -305,8 +234,8 @@ def parse_questions(file_name):
     prop_cert_questions = {
         1: "officer:",
         2: "705?",
-        3: "During the performance of the contract, the research/research and development will be performed",
-        4: "offerors facilities by the offerors employees except as otherwise indicated in the technical",
+        3: "During the performance of the contract, the research/research and",
+        4: "offerors facilities by the offerors employees except as otherwise",
         5: "or equipment?",
         6: "control regulations",
         7: "There will be ITAR/EAR data in this work and/or deliverables.",
@@ -325,14 +254,14 @@ def parse_questions(file_name):
 
     firm_cert_questions = {
         1: "requirements set forth in 13 C.F.R. ??121.702.",
-        2: "requirements are U.S. citizens or permanent resident aliens in the United States.",
-        3: "It has no more than 500 employees, including the employees of its affiliates.",
-        4: "Number of employees including all affiliates (average for preceding 12 months)",
-        5: "It has met the performance benchmarks as listed by the SBA on their website as eligible to participate",
+        2: "requirements are U.S. citizens or permanent resident aliens in",
+        3: "It has no more than 500 employees, including the employees of",
+        4: "Number of employees including all affiliates (average for",
+        5: "It has met the performance benchmarks as listed by the SBA on",
         6: "funds or private equity",
-        7: "It has more than 50% owned by a single Venture Capital Owned Company (VCOC), hedge fund, or private equity",
-        8: "It has more than 50% owned by multiple business concerns that are VOCs, hedge funds, or private equity",
-        9: "Firms PI, CO, or owner, a faculty member or student of an institution of higher education",
+        7: "It has more than 50% owned by a single Venture Capital Owned",
+        8: "It has more than 50% owned by multiple business concerns that",
+        9: "Firms PI, CO, or owner, a faculty member or student of an",
         10: "The offeror qualifies as a:",
         11: "Race of the offeror:",
         12: "Ethnicity of the offeror",
@@ -395,6 +324,7 @@ def parse_questions(file_name):
                 result["Duration (Mo.)"] = single_text.split()[-1].strip()
                 duration = False
 
+    """
     #print(result)
     if prop_cert_questions:
         print(f"Couldn't find Proposal Certificate questions: {prop_cert_questions}")
@@ -402,6 +332,7 @@ def parse_questions(file_name):
     if firm_cert_questions:
         print(f"Couldn't find Proposal Certificate questions: {firm_cert_questions}")
         result["Missing Firm Certificate Questions"] = list(firm_cert_questions)
+    """
     return result
 # ==============================================================================
 def parse_budget(file_name,
@@ -455,7 +386,7 @@ def parse_budget(file_name,
                     #print(budget_str)
                     total_proposal_cost = float(budget_str.lstrip('$').replace(",",""))
                     result["Total"] = total_proposal_cost
-                    print(result)
+                    #print(result)
                     if total_proposal_cost > max_value:
                         print(f"WARNING! Proposed budget exceeds ${max_value}!")
                     total_heading = False
@@ -499,7 +430,7 @@ def process_pdf_sigs_fitz(file_name):
     Print info about POC info, as well as text and surrounding
     text containing any of the key phrases defined below
     """
-    print(file_name)
+    #print(file_name)
     got_text = False
     result = defaultdict(str)
     headers = [
@@ -555,11 +486,11 @@ def ocr_cleanup(open_file_handle, open_file_name, files_to_remove):
     """
     print(f"Removing OCR artifacts related to {open_file_name}")
     for file_name_to_remove in files_to_remove:
-        os.remove(file_name_to_remove)
+        remove(file_name_to_remove)
     if open_file_handle:
         open_file_handle.close()
     if open_file_name:
-        os.remove(open_file_name)
+        remove(open_file_name)
 # ==============================================================================
 def ocr_pdf(file_name):
     """
@@ -631,7 +562,67 @@ def natural_keys(text):
     Helper function #2 for sorting strings with numbers within them
     """
     return [atoi(c) for c in re.split('(\d+)', text)]
-#==============================================================================
+#===============================================================================
+def parse_file(params):
+    """
+    Called by main(): this is the top level function for processing any file.
+    Having one top-level function in this fashion allows for easy parallelization
+    with a multiprocessing Pool later, once all other optimizations are complete.
+    # TODO Call this in parallel.
+    """
+    file_name, prop_number, ocr_flag, questions_file, budget_file, ppt_extensions, max_value = params
+    #print("-"*80)
+    #print(file_name)
+    results = {}
+    file_info = {}
+    poc_info = {}
+    file_extension = file_name.split(".")[-1]
+
+    # Process PowerPoint files
+    if file_extension in ppt_extensions:
+        process_ppt(file_name)
+        #total_files +=1
+
+    # All others are PDFs
+    else:
+        #process_pdf_page_titles(file_name)
+        #if any(keyword in file_name.lower() for keyword in args.questions_file):
+        if questions_file.lower() in file_name.lower():
+            file_info = parse_questions(file_name)
+            results.update(file_info)
+            if not file_info:
+                if not results and ocr_flag:
+                    ocr_pdf(file_name)
+                else:
+                    print(f"Can't parse {file_name}; Consider enabling OCR with -o True")
+        #if "budget" in file_name:
+
+        if budget_file.lower() in file_name.lower():
+            file_info = parse_budget(file_name, max_value)
+            results.update(file_info)
+            #results.update(get_total_budget(file_name))
+            if not file_info:
+                if not results and ocr_flag:
+                    ocr_pdf(file_name)
+                else:
+                    print(f"Can't parse {file_name}; Consider enabling OCR with -o True")
+
+        # Try to get signatures and TPOC data from this PDF
+        # If all 3 POCs haven't yet been found, search this file for them
+        if len(poc_info) < 3:
+            poc_info = process_pdf_sigs_fitz(file_name)
+            if poc_info:
+                #print(f"Found POC info in  {file_name}")
+                results.update(poc_info)
+    """
+    for k in results.keys():
+        try:
+            results[k] = results[k].strip()
+        except AttributeError:
+            pass
+    """
+    return {prop_number:results}
+# ==============================================================================
 def main():
     """
     Create a list of files as provided by -f and -d flags.
@@ -664,7 +655,7 @@ def main():
     # Count the total number of files to be parsed by recursively walking
     # all provided directories.
     for source_dir in dirs:
-        for (root, _, files) in os.walk(source_dir):
+        for (root, _, files) in walk(source_dir):
             for file_name in files:
                 file_extension = file_name.split(".")[-1]
                 if ((args.keyword and all(x in file_name.lower() for x in args.keyword)) or \
@@ -672,9 +663,10 @@ def main():
                     file_extension.lower() in valid_extensions:
                     file_name =root+'/'+file_name
                     prop_number = re.search(four_digits, file_name)
-                    if prop_number:
-                        prop_number = prop_number.group(1)
-                        target_files.add((file_name, prop_number, args.ocr, args.questions_file, args.budget_file, tuple(ppt_extensions), args.max_value))
+                    if not prop_number:
+                        continue
+                    prop_number = prop_number.group(1)
+                    target_files.add((file_name, prop_number, args.ocr, args.questions_file, args.budget_file, tuple(ppt_extensions), args.max_value))
 
     print(f"Parsing {len(target_files)} files. This could take a few seconds.")
     # Reset the counter.  It will be incremented as each file is parsed.
@@ -682,7 +674,7 @@ def main():
 
     # Here is the serial (non-parallel) approach.  Slow, but it works.
     # TODO Parallelize
-    with mp.Pool() as p:
+    with Pool() as p:
         my_p_results = p.map(parse_file, target_files)
 
     for item in my_p_results:
@@ -692,7 +684,6 @@ def main():
     #print(my_p_results)
 
 
-    end = time.time()
 
     results = pd.DataFrame.from_dict(all_info, orient="index")
 
@@ -705,6 +696,7 @@ def main():
     # Print and save resulting table
     pprint.pprint(results)
     results.to_csv(args.out)
+    end = time.time()
     print(f"{len(target_files)} files in {end-start} seconds")
 
 # ==============================================================================
@@ -764,7 +756,7 @@ if __name__ == "__main__":
                         '-m',
                         type=int,
                         default=1250000,
-                        help="Max dollar value for proposals.  Will print warning if value is exceeded"
+                        help="Max dollar value for proposals; warns if value exceeded"
                         )
     args = parser.parse_args()
 
@@ -779,15 +771,14 @@ if __name__ == "__main__":
     print("Invocation correct, loading standard modules")
     import pprint
     import time
-    import math
+    from multiprocessing import Pool
 
-    print("Loading pandas and collections modules")
+    print("Loading pandas modules")
     import pandas as pd
 
     # Note: the PPT module is lazily loaded in main()
 
     print("Loading fitz (pdf module)")
-    import fitz
     if args.ocr:
         print("Loading OCR modules...")
         from pdf2image import convert_from_path
@@ -804,6 +795,20 @@ if __name__ == "__main__":
 
     ppt_extensions = ["ppt", "pptx"]
     valid_extensions = ppt_extensions + ["pdf"]
+    # TODO Update with mandatory sections, then check for their presence
+    sections = [
+        "Method",
+        "Approach"
+    ]
 
+    key_phrases = [
+        "DAF Customer",
+        "DAF End-User",
+        "Digitally signed by",
+        "TPOC:",
+        "TPOCs:",
+        "TPOCS:",
+        "Technical Point of Contact"
+    ]
     # args is global so no need to pass it
     slide = main()
