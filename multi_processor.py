@@ -640,6 +640,8 @@ def main():
 
     Write results to args.out
     """
+    start = time.time()
+
     target_files = set()
     dirs = []
 
@@ -679,7 +681,6 @@ def main():
     #total_files = 0
 
     # Here is the serial (non-parallel) approach.  Slow, but it works.
-    start = time.time()
     # TODO Parallelize
     with mp.Pool() as p:
         my_p_results = p.map(parse_file, target_files)
@@ -692,7 +693,6 @@ def main():
 
 
     end = time.time()
-    print(f"{len(target_files)} files in {end-start} seconds")
 
     results = pd.DataFrame.from_dict(all_info, orient="index")
 
@@ -705,6 +705,8 @@ def main():
     # Print and save resulting table
     pprint.pprint(results)
     results.to_csv(args.out)
+    print(f"{len(target_files)} files in {end-start} seconds")
+
 # ==============================================================================
 if __name__ == "__main__":
 
