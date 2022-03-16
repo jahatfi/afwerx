@@ -6,10 +6,80 @@ Parse AFWERX Proposals for the following info an aggregate it in one .csv file:
 4. TPOC info
 5. Various budget line items
 """
+from collections import defaultdict
+import fitz
+import re
+import math
+# Pre-compile re expressions
+safety_heading = re.compile("safety.*related.*deliverables")
+some_digits = re.compile('\d{5,}')
+four_digits = re.compile(r"(\d{4})")
+
+# ==============================================================================
+def parse_file(params):
+    """
+    Called by main(): this is the top level function for processing any file.
+    Having one top-level function in this fashion allows for easy parallelization
+    with a multiprocessing Pool later, once all other optimizations are complete.
+    # TODO Call this in parallel.
+    """
+    file_name, prop_number, ocr_flag, questions_file, budget_file, ppt_extensions, max_value = params
+    #print("-"*80)
+    #print(file_name)
+    sig_dict = {}
+    file_info = {}
+    poc_info = {}
+    file_extension = file_name.split(".")[-1]
+
+    # Process PowerPoint files
+    if file_extension in ppt_extensions:
+        process_ppt(file_name)
+        #total_files +=1
+
+    # All others are PDFs
+    else:
+        #process_pdf_page_titles(file_name)
+        #if any(keyword in file_name.lower() for keyword in args.questions_file):
+        if questions_file.lower() in file_name.lower():
+            file_info = parse_questions(file_name)
+            sig_dict.update(file_info)
+            if not file_info:
+                if not sig_dict and ocr_flag:
+                    ocr_pdf(file_name)
+                else:
+                    print(f"Can't parse {file_name}; Consider enabling OCR with -o True")
+        #if "budget" in file_name:
+
+        if budget_file.lower() in file_name.lower():
+            file_info = parse_budget(file_name, max_value)
+            sig_dict.update(file_info)
+            #sig_dict.update(get_total_budget(file_name))
+            if not file_info:
+                if not sig_dict and ocr_flag:
+                    ocr_pdf(file_name)
+                else:
+                    print(f"Can't parse {file_name}; Consider enabling OCR with -o True")
+
+        # Try to get signatures and TPOC data from this PDF
+        # If all 3 POCs haven't yet been found, search this file for them
+        if len(poc_info) < 3:
+            poc_info = process_pdf_sigs_fitz(file_name)
+            if poc_info:
+                #print(f"Found POC info in  {file_name}")
+                sig_dict.update(poc_info)
+
+    for k in sig_dict.keys():
+        try:
+            sig_dict[k] = sig_dict[k].strip()
+        except AttributeError:
+            pass
+    return {prop_number:sig_dict}
+#===============================================================================
 import argparse
 import os
 import sys
 from utils import is_directory, is_filename
+import multiprocessing as mp
 
 # TODO Update with mandatory sections, then check for their presence
 sections = [
@@ -546,64 +616,7 @@ def ocr_pdf(file_name):
                     #return[0]
             #print(text)
     ocr_cleanup(f, outfile, files_to_remove)
-# ==============================================================================
-def parse_file(file_name, prop_number, ocr_flag):
-    """
-    Called by main(): this is the top level function for processing any file.
-    Having one top-level function in this fashion allows for easy parallelization
-    with a multiprocessing Pool later, once all other optimizations are complete.
-    # TODO Call this in parallel.
-    """
-    #print("-"*80)
-    #print(file_name)
-    sig_dict = {}
-    file_info = {}
-    poc_info = {}
-    file_extension = file_name.split(".")[-1]
 
-    # Process PowerPoint files
-    if file_extension in ppt_extensions:
-        process_ppt(file_name)
-        #total_files +=1
-
-    # All others are PDFs
-    else:
-        #process_pdf_page_titles(file_name)
-        #if any(keyword in file_name.lower() for keyword in args.questions_file):
-        if args.questions_file.lower() in file_name.lower():
-            file_info = parse_questions(file_name)
-            sig_dict.update(file_info)
-            if not file_info:
-                if not sig_dict and ocr_flag:
-                    ocr_pdf(file_name)
-                else:
-                    print(f"Can't parse {file_name}; Consider enabling OCR with -o True")
-        #if "budget" in file_name:
-
-        if args.budget_file.lower() in file_name.lower():
-            file_info = parse_budget(file_name, args.max_value)
-            sig_dict.update(file_info)
-            #sig_dict.update(get_total_budget(file_name))
-            if not file_info:
-                if not sig_dict and ocr_flag:
-                    ocr_pdf(file_name)
-                else:
-                    print(f"Can't parse {file_name}; Consider enabling OCR with -o True")
-
-        # Try to get signatures and TPOC data from this PDF
-        # If all 3 POCs haven't yet been found, search this file for them
-        if len(poc_info) < 3:
-            poc_info = process_pdf_sigs_fitz(file_name)
-            if poc_info:
-                #print(f"Found POC info in  {file_name}")
-                sig_dict.update(poc_info)
-
-    for k in sig_dict.keys():
-        try:
-            sig_dict[k] = sig_dict[k].strip()
-        except AttributeError:
-            pass
-    return sig_dict
 # ==============================================================================
 #https://www.tutorialspoint.com/How-to-correctly-sort-a-string-with-a-number-inside-in-Python
 def atoi(text):
@@ -655,7 +668,11 @@ def main():
                 if ((args.keyword and all(x in file_name.lower() for x in args.keyword)) or \
                     not args.keyword) and \
                     file_extension.lower() in valid_extensions:
-                    target_files.add(root+'/'+file_name)
+                    file_name =root+'/'+file_name
+                    prop_number = re.search(four_digits, file_name)
+                    if prop_number:
+                        prop_number = prop_number.group(1)
+                        target_files.add((file_name, prop_number, args.ocr, args.questions_file, args.budget_file, tuple(ppt_extensions), args.max_value))
 
     print(f"Parsing {len(target_files)} files. This could take a few seconds.")
     # Reset the counter.  It will be incremented as each file is parsed.
@@ -664,15 +681,14 @@ def main():
     # Here is the serial (non-parallel) approach.  Slow, but it works.
     start = time.time()
     # TODO Parallelize
-    for file_name in sorted(target_files):
+    with mp.Pool() as p:
+        my_p_results = p.map(parse_file, target_files)
 
-        prop_number = re.search(four_digits, file_name)
-        if prop_number:
-            prop_number = prop_number.group(1)
-            #print(f"Proposal: {prop_number}")
-            file_info = parse_file(file_name, prop_number, args.ocr)
-            if file_info:
-                all_info[prop_number].update(file_info)
+    for item in my_p_results:
+        k, v = item.popitem()
+        if v:
+            all_info[k].update(v)
+    #print(my_p_results)
 
 
     end = time.time()
@@ -748,7 +764,6 @@ if __name__ == "__main__":
                         default=1250000,
                         help="Max dollar value for proposals.  Will print warning if value is exceeded"
                         )
-
     args = parser.parse_args()
 
     if not args.file and not args.directory:
@@ -762,12 +777,10 @@ if __name__ == "__main__":
     print("Invocation correct, loading standard modules")
     import pprint
     import time
-    import re
     import math
 
     print("Loading pandas and collections modules")
     import pandas as pd
-    from collections import defaultdict
 
     # Note: the PPT module is lazily loaded in main()
 
@@ -780,11 +793,6 @@ if __name__ == "__main__":
         import pytesseract
 
     print("Done loading modules")
-
-    # Pre-compile re expressions
-    safety_heading = re.compile("safety.*related.*deliverables")
-    some_digits = re.compile('\d{5,}')
-    four_digits = re.compile(r"(\d{4})")
 
     pd.set_option('display.width', 1000)
     pd.set_option('display.max_colwidth', 1000)
