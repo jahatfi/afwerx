@@ -436,7 +436,7 @@ def parse_questions(file_name):
                     this_answer = {f"Proposal Certification Q{value}":answer}
                     prop_cert_questions.pop(value)
                     result.update(this_answer)
-                    if result['Type'] == "SBIR" and result["Phase"] == "I" and len(prop_cert_questions) == 4:
+                    if result['Type'] == "SBIR" and len(prop_cert_questions) == 4:
                         x = set(prop_cert_questions.values())
                         if len(x) == 1 and x.pop() == 'N/A':
                             for k,v  in prop_cert_questions.items():
@@ -730,7 +730,7 @@ def parse_file(file_name, prop_number, ocr_flag):
 
         # Try to get signatures and TPOC data from this PDF
         # If all 3 POCs haven't yet been found, search this file for them
-        if not poc_info and file_info["Phase"] != "I":
+        if not poc_info:
             poc_info = process_pdf_sigs_fitz(file_name)
             if poc_info:
                 print(f"Found POC info in {file_name}")
