@@ -147,14 +147,18 @@ def parse_proposal_certification(   seg_i,
     questions.  If it matches any of them, parse the corresponding answer and
     return it as a {question number:question answer} dict.
 
-    If no match, return an emtpy dictionary: {}
+    If no match, return an empty dictionary: {}
     """
     result = {}
     answer = ""
 
-    for value, key in prop_cert_questions.items():
-        if key not in single_text:
+    for key, value in prop_cert_questions.items():
+        if value not in single_text or value == "N/A":
             continue
+
+        if key == 19:
+            print(single_text)
+            print("19")
 
         if single_text.split()[-1] in ["YES", "NO"]:
             answer = single_text.split()[-1]
@@ -162,13 +166,13 @@ def parse_proposal_certification(   seg_i,
 
         elif prop_type == "SBIR":
             #
-            if value in [3,4]:
+            if key in [3,4]:
                 answer = text_segs[seg_i+2].strip()
                 if not answer:
                     answer = text_segs[seg_i+3].strip()
 
-            elif 6 == value:
-                if key in single_text:
+            elif 6 == key:
+                if value in single_text:
                     for text in text_segs[seg_i+1:seg_i+3]:
                         answer = text.strip()
                         if answer.lower() in ["yes", "no"]:
@@ -182,13 +186,13 @@ def parse_proposal_certification(   seg_i,
                     index += 1
 
         elif prop_type == "STTR":
-            if value == 4:
+            if key == 4:
                 answer = text_segs[seg_i+2].strip()
                 if not answer:
                     answer = text_segs[seg_i+3].strip()
 
-            elif 6 == value:
-                if key in single_text:
+            elif 6 == key:
+                if value in single_text:
                     for text in text_segs[seg_i+1:seg_i+3]:
                         answer = text.strip()
                         if answer.lower() in ["yes", "no"]:
@@ -201,9 +205,9 @@ def parse_proposal_certification(   seg_i,
                         break
                     index += 1
         if len(answer.split()) != 1:
-            print(f"Answer to Prop Q #{value} of '{answer}' seems wrong, patching over it with last YES/NO text block found:'{last_answer}'")
+            print(f"Answer to Prop Q #{key} of '{answer}' seems wrong, patching over it with last YES/NO text block found:'{last_answer}'")
             answer = last_answer
-        result = {value:answer}
+        result = {key:answer}
         #print(result)
     return result
 # ==============================================================================
@@ -285,6 +289,10 @@ def parse_questions(file_name):
     """
     print(f"Parsing all forms: {file_name}")
 
+    sbir_phase_I_prop_cert_question_1 = "Written Approval:"
+    sbir_phase_II_prop_cert_question_1 = "officer:"
+
+
     sbir_prop_cert_questions = {
         1: "officer:",
         2: "705?",
@@ -306,7 +314,8 @@ def parse_questions(file_name):
         18: "Economic Development Organizations?",
         19: "N/A",
         20: "N/A",
-        21: "N/A"
+        21: "N/A",
+        22: "N/A"
     }
 
     sttr_prop_cert_questions = {
@@ -386,6 +395,10 @@ def parse_questions(file_name):
                 elif prop_type == "STTR":
                     prop_cert_questions = sttr_prop_cert_questions
                 this_answer = {"Type":prop_type, "Phase": prop_phase}
+                print(f"{this_answer=}")
+                if this_answer["Type"] == "SBIR" and this_answer["Phase"] == "I":
+                    print("Updating Prop Q1")
+                    sbir_prop_cert_questions[1] = sbir_phase_I_prop_cert_question_1
                 result.update(this_answer)
 
             if not prop_type:
@@ -423,7 +436,15 @@ def parse_questions(file_name):
                     this_answer = {f"Proposal Certification Q{value}":answer}
                     prop_cert_questions.pop(value)
                     result.update(this_answer)
+                    if result['Type'] == "SBIR" and result["Phase"] == "I" and len(prop_cert_questions) == 4:
+                        x = set(prop_cert_questions.values())
+                        if len(x) == 1 and x.pop() == 'N/A':
+                            for k,v  in prop_cert_questions.items():
+                                result[f"Proposal Certification Q{k}"]= v
+                            prop_cert_questions = {}
                     continue
+
+
 
             # This safety info appears twice, once in the table of contents
             #and once in the body
@@ -438,6 +459,7 @@ def parse_questions(file_name):
                 result["Duration (Mo.)"] = single_text.split()[-1].strip()
                 duration = False
 
+    #for prop_cert_question in prop_cert_questions:
     #print(result)
     if prop_cert_questions:
         print(f"Couldn't find Proposal Certificate questions:")
@@ -540,8 +562,7 @@ def get_total_budget(file_name,
 # ==============================================================================
 def process_pdf_sigs_fitz(file_name):
     """
-    Print info about POC info, as well as text and surrounding
-    text containing any of the key phrases defined below
+    Collect POC info, returning immediately once all 3 POCs found
     """
     print(f"process_pdf_sigs_fitz({file_name})")
     got_text = False
@@ -566,31 +587,33 @@ def process_pdf_sigs_fitz(file_name):
             for seg_i, single_text in enumerate(text_segs):
                 #print(f"Page #{pi}, text #: {seg_i}: '{single_text}'")
                 for key_phrase in headers:
-                    if key_phrase in single_text:
-                        count = 0
-                        index = 0
-                        # Sometimes there are blank newlines
-                        # Skip over them, grabbing the next two lines with text
-                        while index < 10:
-                            try:
-                                x = text_segs[seg_i+index]
-                            except IndexError as e:
-                                break
-                            if x.strip():
-                                count += 1
-                                result[key_phrase] += x + '\n'
-                                #print(x)
-
-                            index +=1
-                            if x.rstrip().endswith(","):
-                                continue
-                            if count > 2 or index > 10:
-                                break
-
-                        headers.remove(key_phrase)
-                        if not headers:
-                            return result
+                    if key_phrase not in single_text:
                         continue
+
+                    count = 0
+                    index = 0
+                    # Sometimes there are blank newlines
+                    # Skip over them, grabbing the next two lines with text
+                    while index < 10:
+                        try:
+                            x = text_segs[seg_i+index]
+                        except IndexError as e:
+                            break
+                        if x.strip():
+                            count += 1
+                            result[key_phrase] += x + '\n'
+                            #print(x)
+
+                        index +=1
+                        if x.rstrip().endswith(","):
+                            continue
+                        if count > 2 or index > 10:
+                            break
+
+                    headers.remove(key_phrase)
+                    if not headers:
+                        return result
+                    continue
     return result
 # ==============================================================================
 def ocr_cleanup(open_file_handle, open_file_name, files_to_remove):
@@ -670,9 +693,9 @@ def parse_file(file_name, prop_number, ocr_flag):
     # TODO Call this in parallel.
     """
     #print("-"*80)
-    #print(file_name)
+    print(f"Parsing {file_name}")
     sig_dict = {}
-    file_info = {}
+    file_info = {}#{"Phase":'?'}
     poc_info = {}
     file_extension = file_name.split(".")[-1]
 
@@ -686,7 +709,7 @@ def parse_file(file_name, prop_number, ocr_flag):
         #process_pdf_page_titles(file_name)
         #if any(keyword in file_name.lower() for keyword in args.questions_file):
         if args.questions_file.lower() in file_name.lower():
-            file_info = parse_questions(file_name)
+            file_info.update(parse_questions(file_name))
             sig_dict.update(file_info)
             if not file_info:
                 if not sig_dict and ocr_flag:
@@ -696,7 +719,7 @@ def parse_file(file_name, prop_number, ocr_flag):
         #if "budget" in file_name:
 
         if args.budget_file.lower() in file_name.lower():
-            file_info = parse_budget(file_name, args.max_value)
+            file_info.update(parse_budget(file_name, args.max_value))
             sig_dict.update(file_info)
             #sig_dict.update(get_total_budget(file_name))
             if not file_info:
@@ -707,7 +730,7 @@ def parse_file(file_name, prop_number, ocr_flag):
 
         # Try to get signatures and TPOC data from this PDF
         # If all 3 POCs haven't yet been found, search this file for them
-        if not poc_info:
+        if not poc_info and file_info["Phase"] != "I":
             poc_info = process_pdf_sigs_fitz(file_name)
             if poc_info:
                 print(f"Found POC info in {file_name}")
@@ -735,6 +758,9 @@ def natural_keys(text):
     Helper function #2 for sorting strings with numbers within them
     """
     return [atoi(c) for c in re.split('(\d+)', text)]
+def done_gathering_info(info):
+    pass
+
 #==============================================================================
 def main():
     """
@@ -746,7 +772,7 @@ def main():
     """
     target_files = set()
     dirs = []
-
+    prop_status = defaultdict(str)
     all_info = defaultdict(dict)
     poc_headers = [
         "Primary End-User Organization",
@@ -777,7 +803,7 @@ def main():
                 if ((args.keyword and all(x in file_name.lower() for x in args.keyword)) or \
                     not args.keyword) and \
                     file_extension.lower() in valid_extensions:
-                    target_files.add(root+'/'+file_name)
+                    target_files.add((root+'/'+file_name, os.path.getsize(root+'/'+file_name)))
 
     print(f"Parsing {len(target_files)} files. This could take a few seconds.")
     # Reset the counter.  It will be incremented as each file is parsed.
@@ -786,16 +812,23 @@ def main():
     # Here is the serial (non-parallel) approach.  Slow, but it works.
     start = time.time()
     # TODO Parallelize
-    for file_name in sorted(target_files):
+    target_files = sorted(target_files, key=lambda x:x[1], reverse=True)
 
+    for file_name, _ in sorted(target_files):
         prop_number = re.search(four_digits, file_name)
-        if prop_number:
-            prop_number = prop_number.group(1)
-            #print(f"Proposal: {prop_number}")
-            file_info = parse_file(file_name, prop_number, args.ocr)
-            if file_info:
-                all_info[prop_number].update(file_info)
+        if not prop_number or prop_status[prop_number]:
+            continue
+        prop_number = prop_number.group(1)
+        #print(f"Proposal: {prop_number}")
+        file_info = parse_file(file_name, prop_number, args.ocr)
+        if done_gathering_info(file_info):
+            prop_status[prop_number] = True
+        if file_info:
+            all_info[prop_number].update(file_info)
 
+    # All 3 POC (Tech POC, customer, end user)
+    # are reqquired for all but Phase I proposals
+    # If any are missing for other Phases, annotate as "NOT FOUND"
     for k,v in all_info.items():
         for poc_header in poc_headers:
             if poc_header not in v:
