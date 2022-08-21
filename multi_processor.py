@@ -28,7 +28,8 @@ key_phrases = [
 ]
 
 # ==============================================================================
-# Reference: https://stackoverflow.com/questions/15008758/parsing-boolean-values-with-argparse
+# Reference:
+# https://stackoverflow.com/questions/15008758/
 def str2bool(this_string):
     """
     Validates that an argparse argument is a boolean value.
@@ -79,7 +80,7 @@ def parse_firm_certificate(seg_i, single_text, text_segs, firm_cert_questions):
     """
     Given a segment index, single line of text, list of text segments,
     and firm certificate questions
-    (provided as a dictionary mapping question number to (partial) question text),
+    (provided as a dict mapping question number to (partial) question text),
     check if this single line of text matches any of the firm certification
     questions.  If it matches any of them, parse the corresponding answer and
     return it as a {question number:question answer} dict.
@@ -133,11 +134,14 @@ def parse_firm_certificate(seg_i, single_text, text_segs, firm_cert_questions):
     return result
 
 # ==============================================================================
-def parse_proposal_certification(seg_i, single_text, text_segs, prop_cert_questions):
+def parse_proposal_certification(   seg_i,
+                                    single_text,
+                                    text_segs,
+                                    prop_cert_questions):
     """
     Given a segment index, single line of text, list of text segments,
     and proposal certification questions
-    (provided as a dictionary mapping question number to (partial) question text),
+    (provided as a dict mapping question number to (partial) question text),
     check if this single line of text matches any of the firm certification
     questions.  If it matches any of them, parse the corresponding answer and
     return it as a {question number:question answer} dict.
@@ -195,7 +199,8 @@ def parse_safety(seg_i, single_text, text_segs):
             pass
             #print(f"Exception {e}")
 
-    # Low start <0 means the number was found in a text block BEFORE the key word
+    # Low start <0 means the number was found in a
+    # text block BEFORE the key word
     if low_start < 0:
         for i in range(low_start,0,1):
             result += text_segs[seg_i+i] + ' '
@@ -225,6 +230,22 @@ def parse_safety(seg_i, single_text, text_segs):
 
     return {}
 # ==============================================================================
+def parse_type_phase(text):
+    phase = ""
+    p_type = ""
+    if "Phase III" in text:
+        phase = "III"
+    elif "Phase II" in text:
+        phase = "II"
+    elif "Phase I" in text:
+        phase = "I"
+
+    if "SBIR" in text:
+        p_type = "SBIR"
+    elif "STTR" in text:
+        p_type = "STTR"
+    return p_type, phase
+# ==============================================================================
 def parse_questions(file_name):
     """
     Parse all relevant fields from the all_forms files, e.g.
@@ -232,7 +253,7 @@ def parse_questions(file_name):
     """
     print(f"Parsing all forms: {file_name}")
 
-    prop_cert_questions = {
+    sbir_prop_cert_questions = {
         1: "officer:",
         2: "705?",
         3: "During the performance of the contract, the research/research and development will be performed",
@@ -250,7 +271,35 @@ def parse_questions(file_name):
         15: "22 CFR 120.16",
         16: "will be on the project?",
         17: "Is the principal investigator socially/economically disadvantaged?",
-        18: "Economic Development Organizations?"
+        18: "Economic Development Organizations?",
+        19: "N/A",
+        20: "N/A",
+        21: "N/A"
+    }
+
+    sttr_prop_cert_questions = {
+        1: "Is the institution a Research Institution?",
+        2: "the research institute as described in 13 C.F.R ???? 701-705",
+        3: "as defined by 13 C.F.R ???? 701-705",
+        4: "research/research and development will be performed in the",
+        5: "offerors employees except as otherwise indicated in the technical proposal.",
+        6: "Do you plan to use Federal facilities, laboratories, or equipment?",
+        7: "The offeror understands and shall comply with export control regulations",
+        8: "There will be ITAR/EAR data in this work and/or deliverables",
+        9: "components",
+        10: "Contract been awarded for any of the proposals listed above",
+        11: "under this award is subsequently funded by another Federal agency",
+        12: "disclosure restriction",
+        13: "Recombinant DNA of the solicitation:",
+        14: "may be cause for rejection of the proposal submission without evaluation.",
+        15: "Are teaming partners or subcontractors proposed?",
+        16: "CFR 120.16 for work under the proposed effort?",
+        17: "Percentage of the principal investigators total time will be on the project:",
+        18: "Firm Percentage of Work",
+        19: "Research Institute Percentage of Work",
+        20: "Other Subcontractor Percentage of Work",
+        21: "Is the principal investigator socially/economically disadvantaged?",
+        22: "contact information to Economic Development Organizations?"
     }
 
     firm_cert_questions = {
@@ -275,11 +324,13 @@ def parse_questions(file_name):
     }
 
     duration = "Proposed Base Duration (in months)"
+    prop_cert_questions = None
 
     text_segs = []
     safety_info_found = 0
     result = {}
     answer = ""
+    type_found = False
     with fitz.open(file_name) as doc:
         for page_i, page in enumerate(doc):
             #print(f"{page_count}".center(80,"-"))
@@ -292,9 +343,23 @@ def parse_questions(file_name):
             if not single_text:
                 continue
 
-            # Remove entries from the firm_cert_questions list once they're found
+            if not type_found and "Phase" in single_text and "Proposal" in single_text:
+                print(single_text)
+                type_found = True
+                prop_type, prop_phase = parse_type_phase(single_text)
+                if prop_type == "SBIR":
+                    prop_cert_questions = sbir_prop_cert_questions
+                elif prop_type == "STTR":
+                    prop_cert_questions = sttr_prop_cert_questions
+                this_answer = {"Type":prop_type, "Phase": prop_phase}
+                result.update(this_answer)
+
+            # Remove entries from the firm_cert_questions list once found
             if firm_cert_questions:
-                firm_cert_info = parse_firm_certificate(seg_i, single_text, text_segs, firm_cert_questions)
+                firm_cert_info = parse_firm_certificate(seg_i,
+                                                        single_text,
+                                                        text_segs,
+                                                        firm_cert_questions)
                 if firm_cert_info:
                     value, answer = firm_cert_info.popitem()
                     this_answer = {f"Firm Certification Q{value}":answer}
@@ -302,9 +367,12 @@ def parse_questions(file_name):
                     result.update(this_answer)
                     continue
 
-            # Remove entries from the prop_cert_questions list once they're found
+            # Remove entries from the prop_cert_questions list once found
             if prop_cert_questions:
-                prop_cert_info = parse_proposal_certification(seg_i, single_text, text_segs, prop_cert_questions)
+                prop_cert_info = parse_proposal_certification(  seg_i,
+                                                                single_text,
+                                                                text_segs,
+                                                                prop_cert_questions)
                 if prop_cert_info:
                     value, answer = prop_cert_info.popitem()
                     this_answer = {f"Proposal Certification Q{value}":answer}
@@ -327,10 +395,12 @@ def parse_questions(file_name):
 
     #print(result)
     if prop_cert_questions:
-        print(f"Couldn't find Proposal Certificate questions: {prop_cert_questions}")
+        print(f"Couldn't find Proposal Certificate questions:")
+        pprint.pprint(prop_cert_questions)
         result["Missing Proposal Certificate questions"] = list(prop_cert_questions.keys())
     if firm_cert_questions:
-        print(f"Couldn't find Proposal Certificate questions: {firm_cert_questions}")
+        print(f"Couldn't find Proposal Certificate questions:")
+        pprint.pprint(firm_cert_questions)
         result["Missing Firm Certificate Questions"] = list(firm_cert_questions)
     return result
 # ==============================================================================
@@ -378,18 +448,17 @@ def parse_budget(file_name,
                         unique_costs.add(cost_float)
                         summed_costs[heading] += cost_float
 
-            if total_heading:
-                if total_heading.lower() in single_text.lower():
-                    #print(single_text)
-                    budget_str = text_segs[seg_i+1]
-                    #print(budget_str)
-                    total_proposal_cost = float(budget_str.lstrip('$').replace(",",""))
-                    result["Total"] = total_proposal_cost
-                    print(result)
-                    if total_proposal_cost > max_value:
-                        print(f"WARNING! Proposed budget exceeds ${max_value}!")
-                    total_heading = False
-                    continue
+            if total_heading and total_heading.lower() in single_text.lower():
+                #print(single_text)
+                budget_str = text_segs[seg_i+1]
+                #print(budget_str)
+                total_proposal_cost = float(budget_str.lstrip('$').replace(",",""))
+                result["Total"] = total_proposal_cost
+                print(result)
+                if total_proposal_cost > max_value:
+                    print(f"WARNING! Proposed budget exceeds ${max_value}!")
+                total_heading = False
+                continue
 
 
                         #print(single_text)
@@ -550,8 +619,9 @@ def ocr_pdf(file_name):
 def parse_file(file_name, prop_number, ocr_flag):
     """
     Called by main(): this is the top level function for processing any file.
-    Having one top-level function in this fashion allows for easy parallelization
-    with a multiprocessing Pool later, once all other optimizations are complete.
+    Having one top-level function in this fashion allows for easy
+    parallelization with a multiprocessing Pool later, once all other
+    optimizations are complete.
     # TODO Call this in parallel.
     """
     #print("-"*80)
@@ -605,14 +675,16 @@ def parse_file(file_name, prop_number, ocr_flag):
             pass
     return sig_dict
 # ==============================================================================
-#https://www.tutorialspoint.com/How-to-correctly-sort-a-string-with-a-number-inside-in-Python
+#https://www.tutorialspoint.com/
+# How-to-correctly-sort-a-string-with-a-number-inside-in-Python
 def atoi(text):
     """
     Helper function for sorting strings with numbers within them
     """
     return int(text) if text.isdigit() else text
 #==============================================================================
-#https://www.tutorialspoint.com/How-to-correctly-sort-a-string-with-a-number-inside-in-Python
+#https://www.tutorialspoint.com/
+# How-to-correctly-sort-a-string-with-a-number-inside-in-Python
 def natural_keys(text):
     """
     Helper function #2 for sorting strings with numbers within them
@@ -682,12 +754,15 @@ def main():
 
     sorted_cols = results.columns.tolist()
     sorted_cols.sort(key=natural_keys)
+    print(f"{sorted_cols=}")
 
+    results = results[['Type', 'Phase']+ [c for c in sorted_cols if c not in ['Type', 'Phase']]]
     # Sort columns in dataframe by name (alphanumerically)
-    results = results[sorted_cols]
+    # results = results[sorted_cols]
     results.index.name = "Proposal ID"
     # Print and save resulting table
-    pprint.pprint(results)
+
+    pprint.pprint(results.T)
     results.to_csv(args.out)
 # ==============================================================================
 if __name__ == "__main__":
@@ -786,8 +861,8 @@ if __name__ == "__main__":
     some_digits = re.compile('\d{5,}')
     four_digits = re.compile(r"(\d{4})")
 
-    pd.set_option('display.width', 1000)
-    pd.set_option('display.max_colwidth', 1000)
+    pd.set_option('display.width', 80)
+    pd.set_option('display.max_colwidth', 80)
     # If you don't have tesseract executable in your PATH, include the following:
     #pytesseract.pytesseract.tesseract_cmd = r'C:\\Program Files\\Tesseract-OCR\\tesseract'
     pprint.pprint(args)
