@@ -132,12 +132,13 @@ def parse_firm_certificate(seg_i, single_text, text_segs, firm_cert_questions):
             break
 
     return result
-
 # ==============================================================================
 def parse_proposal_certification(   seg_i,
                                     single_text,
                                     text_segs,
-                                    prop_cert_questions):
+                                    prop_cert_questions,
+                                    prop_type,
+                                    last_answer):
     """
     Given a segment index, single line of text, list of text segments,
     and proposal certification questions
@@ -150,8 +151,17 @@ def parse_proposal_certification(   seg_i,
     """
     result = {}
     answer = ""
+
     for value, key in prop_cert_questions.items():
-        if key in single_text:
+        if key not in single_text:
+            continue
+
+        if single_text.split()[-1] in ["YES", "NO"]:
+            answer = single_text.split()[-1]
+            print("Yes")
+
+        elif prop_type == "SBIR":
+            #
             if value in [3,4]:
                 answer = text_segs[seg_i+2].strip()
                 if not answer:
@@ -171,7 +181,29 @@ def parse_proposal_certification(   seg_i,
                         break
                     index += 1
 
-            result = {value:answer}
+        elif prop_type == "STTR":
+            if value == 4:
+                answer = text_segs[seg_i+2].strip()
+                if not answer:
+                    answer = text_segs[seg_i+3].strip()
+
+            elif 6 == value:
+                if key in single_text:
+                    for text in text_segs[seg_i+1:seg_i+3]:
+                        answer = text.strip()
+                        if answer.lower() in ["yes", "no"]:
+                            break
+            else:
+                index = 1
+                while index < 8:
+                    answer = text_segs[seg_i+index].strip()
+                    if answer:
+                        break
+                    index += 1
+        if len(answer.split()) != 1:
+            print(f"Answer to Prop Q #{value} of '{answer}' seems wrong, patching over it with last YES/NO text block found:'{last_answer}'")
+            answer = last_answer
+        result = {value:answer}
         #print(result)
     return result
 # ==============================================================================
@@ -331,6 +363,8 @@ def parse_questions(file_name):
     result = {}
     answer = ""
     type_found = False
+    prop_type = False
+    last_answer = None
     with fitz.open(file_name) as doc:
         for page_i, page in enumerate(doc):
             #print(f"{page_count}".center(80,"-"))
@@ -354,6 +388,14 @@ def parse_questions(file_name):
                 this_answer = {"Type":prop_type, "Phase": prop_phase}
                 result.update(this_answer)
 
+            if not prop_type:
+                continue
+
+            single_text = single_text.strip()
+            if len(single_text.split()) == 1:
+                last_answer = single_text
+                #continue
+
             # Remove entries from the firm_cert_questions list once found
             if firm_cert_questions:
                 firm_cert_info = parse_firm_certificate(seg_i,
@@ -367,12 +409,15 @@ def parse_questions(file_name):
                     result.update(this_answer)
                     continue
 
+
             # Remove entries from the prop_cert_questions list once found
             if prop_cert_questions:
                 prop_cert_info = parse_proposal_certification(  seg_i,
                                                                 single_text,
                                                                 text_segs,
-                                                                prop_cert_questions)
+                                                                prop_cert_questions,
+                                                                prop_type,
+                                                                last_answer)
                 if prop_cert_info:
                     value, answer = prop_cert_info.popitem()
                     this_answer = {f"Proposal Certification Q{value}":answer}
@@ -498,13 +543,13 @@ def process_pdf_sigs_fitz(file_name):
     Print info about POC info, as well as text and surrounding
     text containing any of the key phrases defined below
     """
-    print(file_name)
+    print(f"process_pdf_sigs_fitz({file_name})")
     got_text = False
     result = defaultdict(str)
     headers = [
         "Primary End-User Organization",
         "Primary Customer Organization",
-        "Phase II Technical Points of Contact (TPOCs)"
+        "Technical Points of Contact (TPOCs)"
     ]
     with fitz.open(file_name) as doc:
 
@@ -662,10 +707,10 @@ def parse_file(file_name, prop_number, ocr_flag):
 
         # Try to get signatures and TPOC data from this PDF
         # If all 3 POCs haven't yet been found, search this file for them
-        if len(poc_info) < 3:
+        if not poc_info:
             poc_info = process_pdf_sigs_fitz(file_name)
             if poc_info:
-                #print(f"Found POC info in  {file_name}")
+                print(f"Found POC info in {file_name}")
                 sig_dict.update(poc_info)
 
     for k in sig_dict.keys():
@@ -703,6 +748,11 @@ def main():
     dirs = []
 
     all_info = defaultdict(dict)
+    poc_headers = [
+        "Primary End-User Organization",
+        "Primary Customer Organization",
+        "Technical Points of Contact (TPOCs)"
+    ]
 
     if not args.directory:
         args.directory = set()
@@ -746,6 +796,15 @@ def main():
             if file_info:
                 all_info[prop_number].update(file_info)
 
+    for k,v in all_info.items():
+        for poc_header in poc_headers:
+            if poc_header not in v:
+                if v['Phase'] != "I":
+                    v[poc_header]="NOT FOUND"
+                    pass
+                else:
+                    v[poc_header]="N/A"
+
 
     end = time.time()
     print(f"{len(target_files)} files in {end-start} seconds")
@@ -754,7 +813,6 @@ def main():
 
     sorted_cols = results.columns.tolist()
     sorted_cols.sort(key=natural_keys)
-    print(f"{sorted_cols=}")
 
     results = results[['Type', 'Phase']+ [c for c in sorted_cols if c not in ['Type', 'Phase']]]
     # Sort columns in dataframe by name (alphanumerically)
@@ -871,4 +929,4 @@ if __name__ == "__main__":
     valid_extensions = ppt_extensions + ["pdf"]
 
     # args is global so no need to pass it
-    slide = main()
+    main()
