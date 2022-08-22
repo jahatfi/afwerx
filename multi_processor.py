@@ -58,23 +58,23 @@ def process_ppt(file_name):
     from pptx import Presentation
     prs = Presentation(file_name)
 
-    for slide in prs.slides:
+    for slide_index, slide in enumerate(prs.slides):
         try:
             title = slide.shapes.title.text
         except AttributeError:
             title = slide.shapes[0].text
-        print(title)
+        print(f"Slide #{slide_index}: {title=}")
 # ==============================================================================
 def process_pdf_page_titles(file_name):
     """
     Prints the title of every page (intended for slides in pdf format)
     """
     text = ''
-    with fitz.open(file_name ) as doc:
-        for page_count, page in enumerate(doc):
-            #print(f"{page_count}".center(80,"-"))
+    with fitz.open(file_name) as doc:
+        for page_index, page in enumerate(doc):
+            logger.debug(f"{page_index}".center(80,"-"))
             text = page.get_text().split('\n')[0]
-            print(text)
+            print(f"Slide #{page_index}: {title=}")
 # ==============================================================================
 def parse_firm_certificate(seg_i, single_text, text_segs, firm_cert_questions):
     """
@@ -156,13 +156,8 @@ def parse_proposal_certification(   seg_i,
         if value not in single_text or value == "N/A":
             continue
 
-        if key == 19:
-            print(single_text)
-            print("19")
-
         if single_text.split()[-1] in ["YES", "NO"]:
             answer = single_text.split()[-1]
-            print("Yes")
 
         elif prop_type == "SBIR":
             #
@@ -205,10 +200,13 @@ def parse_proposal_certification(   seg_i,
                         break
                     index += 1
         if len(answer.split()) != 1:
-            print(f"Answer to Prop Q #{key} of '{answer}' seems wrong, patching over it with last YES/NO text block found:'{last_answer}'")
+            logger.info(f"Answer to Prop Q #{key} of '{answer}' seems wrong, patching over it with last YES/NO text block found:'{last_answer}'")
             answer = last_answer
-        result = {key:answer}
-        #print(result)
+        if key < 16 and answer.lower() not in ["no", "yes"]:
+            logger.error(f"Parsed answer to Proposal Q #{key} not YES/NO. Skipping")
+        else:
+            result = {key:answer}
+            logger.debug(str(result))
     return result
 # ==============================================================================
 
@@ -233,7 +231,7 @@ def parse_safety(seg_i, single_text, text_segs):
             low_start = i
         except (ValueError, IndexError) as e:
             pass
-            #print(f"Exception {e}")
+            logger.debug(f"Exception {e}")
 
     # Low start <0 means the number was found in a
     # text block BEFORE the key word
@@ -256,10 +254,10 @@ def parse_safety(seg_i, single_text, text_segs):
             if delta >= 1 or not number_str.startswith(str(start_number)):
                 break
         except ValueError as e:
-            #print("Error", e)
+            logger.debug("Error", e)
             pass
         result += text_segs[seg_i+i] + '\n'
-        #print(text_segs[seg_i+i])
+        logger.debug(text_segs[seg_i+i])
 
     if result:
         return {"Safety-Related Deliverables": result}
@@ -284,14 +282,13 @@ def parse_type_phase(text):
 # ==============================================================================
 def parse_questions(file_name):
     """
-    Parse all relevant fields from the all_forms files, e.g.
+    Parse all relevant questions from the all_forms files, e.g.
     F2D-1234_All_forms_proposal_package.pdf
     """
-    print(f"Parsing all forms: {file_name}")
+    #print(f"Parsing all forms: {file_name}")
 
     sbir_phase_I_prop_cert_question_1 = "Written Approval:"
     sbir_phase_II_prop_cert_question_1 = "officer:"
-
 
     sbir_prop_cert_questions = {
         1: "officer:",
@@ -320,8 +317,8 @@ def parse_questions(file_name):
 
     sttr_prop_cert_questions = {
         1: "Is the institution a Research Institution?",
-        2: "the research institute as described in 13 C.F.R ???? 701-705",
-        3: "as defined by 13 C.F.R ???? 701-705",
+        2: "the research institute as described in 13 C.F.R",
+        3: "as defined by 13 C.F.R",
         4: "research/research and development will be performed in the",
         5: "offerors employees except as otherwise indicated in the technical proposal.",
         6: "Do you plan to use Federal facilities, laboratories, or equipment?",
@@ -344,7 +341,7 @@ def parse_questions(file_name):
     }
 
     firm_cert_questions = {
-        1: "requirements set forth in 13 C.F.R. ??121.702.",
+        1: "requirements set forth in 13 C.F.R.",
         2: "requirements are U.S. citizens or permanent resident aliens in the United States.",
         3: "It has no more than 500 employees, including the employees of its affiliates.",
         4: "Number of employees including all affiliates (average for preceding 12 months)",
@@ -361,7 +358,7 @@ def parse_questions(file_name):
         15: "for a fraud-related violation involving federal funds:",
         16: "Supporting Documentation:",
         17: "firm owned or managed by a corporate entity?",
-        18: "Is your firm affiliated as set forth in 13 CFR ??121.103?"
+        18: "Is your firm affiliated as set forth in 13 CFR"
     }
 
     duration = "Proposed Base Duration (in months)"
@@ -376,18 +373,18 @@ def parse_questions(file_name):
     last_answer = None
     with fitz.open(file_name) as doc:
         for page_i, page in enumerate(doc):
-            #print(f"{page_count}".center(80,"-"))
+            logger.debug(f"{page_i}".center(80,"-"))
             text_segs += page.get_text().split('\n')
 
         #for seg_i, (page_i, single_text) in enumerate(text_segs):
         #    print(f"Page #{page_i}, text #: {seg_i}: '{single_text}'")
 
+        # Iterate over every text block in the PDF
         for seg_i, single_text in enumerate(text_segs):
             if not single_text:
                 continue
 
             if not type_found and "Phase" in single_text and "Proposal" in single_text:
-                print(single_text)
                 type_found = True
                 prop_type, prop_phase = parse_type_phase(single_text)
                 if prop_type == "SBIR":
@@ -395,9 +392,9 @@ def parse_questions(file_name):
                 elif prop_type == "STTR":
                     prop_cert_questions = sttr_prop_cert_questions
                 this_answer = {"Type":prop_type, "Phase": prop_phase}
-                print(f"{this_answer=}")
+                logger.debug(f"{single_text=} parsed to {this_answer=}")
                 if this_answer["Type"] == "SBIR" and this_answer["Phase"] == "I":
-                    print("Updating Prop Q1")
+                    logger.debug("Updating SBIR Prop Q1")
                     sbir_prop_cert_questions[1] = sbir_phase_I_prop_cert_question_1
                 result.update(this_answer)
 
@@ -422,7 +419,6 @@ def parse_questions(file_name):
                     result.update(this_answer)
                     continue
 
-
             # Remove entries from the prop_cert_questions list once found
             if prop_cert_questions:
                 prop_cert_info = parse_proposal_certification(  seg_i,
@@ -436,15 +432,10 @@ def parse_questions(file_name):
                     this_answer = {f"Proposal Certification Q{value}":answer}
                     prop_cert_questions.pop(value)
                     result.update(this_answer)
-                    if result['Type'] == "SBIR" and len(prop_cert_questions) == 4:
-                        x = set(prop_cert_questions.values())
-                        if len(x) == 1 and x.pop() == 'N/A':
-                            for k,v  in prop_cert_questions.items():
-                                result[f"Proposal Certification Q{k}"]= v
-                            prop_cert_questions = {}
+                    if result['Type'] == "SBIR" and 19 in prop_cert_questions:
+                        for key in range(19,23):
+                            result[f"Proposal Certification Q{key}"] = prop_cert_questions.pop(key)
                     continue
-
-
 
             # This safety info appears twice, once in the table of contents
             #and once in the body
@@ -460,9 +451,8 @@ def parse_questions(file_name):
                 duration = False
 
     #for prop_cert_question in prop_cert_questions:
-    #print(result)
+    logger.debug(f"{result=}")
     if prop_cert_questions:
-        print(f"Couldn't find Proposal Certificate questions:")
         pprint.pprint(prop_cert_questions)
         result["Missing Proposal Certificate questions"] = list(prop_cert_questions.keys())
     if firm_cert_questions:
@@ -482,7 +472,7 @@ def parse_budget(file_name,
     faster to search for the budget info.  I think.
     # TODO Verify the above with imperical testing.
     """
-    print(f"Parsing budget: {file_name}")
+    #print(f"Parsing budget: {file_name}")
     summed_costs = defaultdict(float)
     sumable_headings =   [
         "Total Direct Travel Costs (TDT)",
@@ -500,12 +490,11 @@ def parse_budget(file_name,
     result = {}
     with fitz.open(file_name ) as doc:
         for page in doc:
-            #print(f"{page_count}".center(80,"-"))
             text_segs += page.get_text().split('\n')
 
         for seg_i, single_text in enumerate(text_segs):
-            #print(single_text)
-            #print(keyphrase, type(keyphrase))
+            logger.debug(single_text)
+            logger.debug(f"{keyphrase} {type(keyphrase)}")
 
             for heading in sumable_headings:
                 if heading.lower() in single_text.lower():
@@ -516,24 +505,20 @@ def parse_budget(file_name,
                         summed_costs[heading] += cost_float
 
             if total_heading and total_heading.lower() in single_text.lower():
-                #print(single_text)
+                logger.debug(single_text)
                 budget_str = text_segs[seg_i+1]
-                #print(budget_str)
+                logger.debug(budget_str)
                 total_proposal_cost = float(budget_str.lstrip('$').replace(",",""))
                 result["Total"] = total_proposal_cost
-                print(result)
+                logger.debug(result)
                 if total_proposal_cost > max_value:
                     print(f"WARNING! Proposed budget exceeds ${max_value}!")
                 total_heading = False
                 continue
 
-
-                        #print(single_text)
-                    #print(text_segs[seg_i+1])
-            #print(text)
     #pprint.pprint(summed_costs)
     result.update(summed_costs)
-    #print(result)
+    logger.debug(result)
     return result
 # ==============================================================================
 def get_total_budget(file_name,
@@ -546,25 +531,26 @@ def get_total_budget(file_name,
     threshold = "$"+str(max_value/1000000)+"M"
     with fitz.open(file_name ) as doc:
         for page in doc:
-            #print(f"{page_count}".center(80,"-"))
+            logger.debug(f"{page_count}".center(80,"-"))
             text_segs = page.get_text().split('\n')
             for seg_i, single_text in enumerate(text_segs):
-                #print(keyphrase, type(keyphrase))
-                if keyphrase.lower() in single_text.lower():
-                    #print(single_text)
-                    budget_str = text_segs[seg_i+1]
-                    #print(budget_str)
-                    budget_float = float(budget_str.lstrip('$').replace(",",""))
-                    #if budget_float > max_value:
-                        #print(f"WARNING! Proposed budget exceeds ${threshold}!")
-                    break
+                logger.debug(keyphrase, type(keyphrase))
+                if keyphrase.lower() not in single_text.lower():
+                    continue
+
+                logger.debug(single_text)
+                budget_str = text_segs[seg_i+1]
+                logger.debug(budget_str)
+                budget_float = float(budget_str.lstrip('$').replace(",",""))
+                if budget_float > max_value:
+                    logger.error(f"WARNING! Proposed budget exceeds ${threshold}!")
+                break
     return {"Total Proposal Value" :budget_float}
 # ==============================================================================
 def process_pdf_sigs_fitz(file_name):
     """
     Collect POC info, returning immediately once all 3 POCs found
     """
-    print(f"process_pdf_sigs_fitz({file_name})")
     got_text = False
     result = defaultdict(str)
     headers = [
@@ -582,10 +568,10 @@ def process_pdf_sigs_fitz(file_name):
                 continue
 
             got_text = True
-            #print(text_segs)
+            logger.debug(text_segs)
             # Iterate over every text field
             for seg_i, single_text in enumerate(text_segs):
-                #print(f"Page #{pi}, text #: {seg_i}: '{single_text}'")
+                logger.debug(f"Page #{pi}, text #: {seg_i}: '{single_text}'")
                 for key_phrase in headers:
                     if key_phrase not in single_text:
                         continue
@@ -602,7 +588,7 @@ def process_pdf_sigs_fitz(file_name):
                         if x.strip():
                             count += 1
                             result[key_phrase] += x + '\n'
-                            #print(x)
+                            logger.debug(x)
 
                         index +=1
                         if x.rstrip().endswith(","):
@@ -678,10 +664,10 @@ def ocr_pdf(file_name):
                     for x in text_segs[seg_i-2:seg_i+5]:
                         print(x)
                     print("*"*80)
-                    #print(single_text.strip())
+                    logger.debug(single_text.strip())
                     #ocr_cleanup(f, outfile, files_to_remove)
                     #return[0]
-            #print(text)
+            logger.debug(text)
     ocr_cleanup(f, outfile, files_to_remove)
 # ==============================================================================
 def parse_file(file_name, prop_number, ocr_flag):
@@ -692,13 +678,12 @@ def parse_file(file_name, prop_number, ocr_flag):
     optimizations are complete.
     # TODO Call this in parallel.
     """
-    #print("-"*80)
-    print(f"Parsing {file_name}")
-    sig_dict = {}
-    file_info = {}#{"Phase":'?'}
+    logger.debug("-"*80)
+    file_info = {}
+    temp_info = {}#{"Phase":'?'}
     poc_info = {}
     file_extension = file_name.split(".")[-1]
-
+    short_name = file_name.split("\\")[-1]
     # Process PowerPoint files
     if file_extension in ppt_extensions:
         process_ppt(file_name)
@@ -709,39 +694,52 @@ def parse_file(file_name, prop_number, ocr_flag):
         #process_pdf_page_titles(file_name)
         #if any(keyword in file_name.lower() for keyword in args.questions_file):
         if args.questions_file.lower() in file_name.lower():
-            file_info.update(parse_questions(file_name))
-            sig_dict.update(file_info)
-            if not file_info:
-                if not sig_dict and ocr_flag:
+            logger.info(f"Parsing {short_name} for questions")
+            temp_info.update(parse_questions(file_name))
+            file_info.update(temp_info)
+            if not temp_info:
+                if not file_info and ocr_flag:
                     ocr_pdf(file_name)
                 else:
-                    print(f"Can't parse {file_name}; Consider enabling OCR with -o True")
+                    print(f"Can't parse {short_name}; Consider enabling OCR with -o True")
         #if "budget" in file_name:
 
         if args.budget_file.lower() in file_name.lower():
-            file_info.update(parse_budget(file_name, args.max_value))
-            sig_dict.update(file_info)
-            #sig_dict.update(get_total_budget(file_name))
-            if not file_info:
-                if not sig_dict and ocr_flag:
+            logger.info(f"Parsing {short_name} for budget info")
+            temp_info.update(parse_budget(file_name, args.max_value))
+            file_info.update(temp_info)
+            #file_info.update(get_total_budget(file_name))
+            if not temp_info:
+                if not file_info and ocr_flag:
                     ocr_pdf(file_name)
                 else:
-                    print(f"Can't parse {file_name}; Consider enabling OCR with -o True")
+                    print(f"Can't parse {short_name}; Consider enabling OCR with -o True")
 
         # Try to get signatures and TPOC data from this PDF
         # If all 3 POCs haven't yet been found, search this file for them
-        if not poc_info:
+        if args.sig_file.lower() in file_name.lower():
+            logger.info(f"Parsing {short_name} for signatures")
             poc_info = process_pdf_sigs_fitz(file_name)
             if poc_info:
-                print(f"Found POC info in {file_name}")
-                sig_dict.update(poc_info)
+                print(f"Found POC info in {short_name}")
+                file_info.update(poc_info)
 
-    for k in sig_dict.keys():
+        # Count number of pages/slides in the proposal document
+        # If all 3 POCs haven't yet been found, search this file for them
+        if args.vol2_file.lower() in file_name.lower():
+            logger.info(f"Counting slides/pages in {short_name}")
+            page_i = 0
+            with fitz.open(file_name) as doc:
+                for page_i, page in enumerate(doc):
+                    pass
+            file_info["Page Count"] = page_i
+
+    for k in file_info.keys():
         try:
-            sig_dict[k] = sig_dict[k].strip()
+            file_info[k] = file_info[k].strip()
         except AttributeError:
             pass
-    return sig_dict
+    return file_info
 # ==============================================================================
 #https://www.tutorialspoint.com/
 # How-to-correctly-sort-a-string-with-a-number-inside-in-Python
@@ -758,9 +756,10 @@ def natural_keys(text):
     Helper function #2 for sorting strings with numbers within them
     """
     return [atoi(c) for c in re.split('(\d+)', text)]
+#==============================================================================
 def done_gathering_info(info):
+    # TODO
     pass
-
 #==============================================================================
 def main():
     """
@@ -803,7 +802,7 @@ def main():
                 if ((args.keyword and all(x in file_name.lower() for x in args.keyword)) or \
                     not args.keyword) and \
                     file_extension.lower() in valid_extensions:
-                    target_files.add((root+'/'+file_name, os.path.getsize(root+'/'+file_name)))
+                    target_files.add((root+'\\'+file_name, os.path.getsize(root+'/'+file_name)))
 
     print(f"Parsing {len(target_files)} files. This could take a few seconds.")
     # Reset the counter.  It will be incremented as each file is parsed.
@@ -815,19 +814,19 @@ def main():
     target_files = sorted(target_files, key=lambda x:x[1], reverse=True)
 
     for file_name, _ in sorted(target_files):
-        prop_number = re.search(four_digits, file_name)
+        prop_number = file_name.split("\\")[-1].split("_")[0]#re.search(four_digits, file_name)
         if not prop_number or prop_status[prop_number]:
             continue
-        prop_number = prop_number.group(1)
-        #print(f"Proposal: {prop_number}")
-        file_info = parse_file(file_name, prop_number, args.ocr)
-        if done_gathering_info(file_info):
+        #prop_number = prop_number.group(1)
+        logger.debug(f"Proposal: {prop_number}")
+        temp_info = parse_file(file_name, prop_number, args.ocr)
+        if done_gathering_info(temp_info):
             prop_status[prop_number] = True
-        if file_info:
-            all_info[prop_number].update(file_info)
+        if temp_info:
+            all_info[prop_number].update(temp_info)
 
     # All 3 POC (Tech POC, customer, end user)
-    # are reqquired for all but Phase I proposals
+    # are required for all but Phase I proposals
     # If any are missing for other Phases, annotate as "NOT FOUND"
     for k,v in all_info.items():
         for poc_header in poc_headers:
@@ -837,17 +836,24 @@ def main():
                     pass
                 else:
                     v[poc_header]="N/A"
+        # I want all the POC info adjecent in the final dataframe/csv, so
+        # I make the change below so they're adjecent when sorted
+        new_name = "Primary Technical Points of Contact (TPOCs)"
+        v[new_name] = v.pop("Technical Points of Contact (TPOCs)")
 
 
     end = time.time()
     print(f"{len(target_files)} files in {end-start} seconds")
 
     results = pd.DataFrame.from_dict(all_info, orient="index")
+    if not any(results):
+        logger.critical("Something went wrong, results is empty")
 
     sorted_cols = results.columns.tolist()
     sorted_cols.sort(key=natural_keys)
-
-    results = results[['Type', 'Phase']+ [c for c in sorted_cols if c not in ['Type', 'Phase']]]
+    logger.debug("Sorted columns:")
+    logger.debug(sorted_cols)
+    results = results[['Type', 'Phase', 'Page Count']+ [c for c in sorted_cols if c not in ['Type', 'Phase', 'Page Count']]]
     # Sort columns in dataframe by name (alphanumerically)
     # results = results[sorted_cols]
     results.index.name = "Proposal ID"
@@ -855,6 +861,7 @@ def main():
 
     pprint.pprint(results.T)
     results.to_csv(args.out)
+    return len(results)
 # ==============================================================================
 if __name__ == "__main__":
 
@@ -875,6 +882,21 @@ if __name__ == "__main__":
                         default="all_forms",
                         action="append",
                         help="Will parse files with this keyword for duration and firm+proposal questions"
+                        )
+
+    parser.add_argument('--sig-file',
+                        '-s',
+                        type=str,
+                        default="mou",
+                        action="append",
+                        help="Will parse files with this keyword for POC signatures"
+                        )
+
+    parser.add_argument('--vol2-file',
+                        type=str,
+                        default="Vol2-proposal",
+                        action="append",
+                        help="Will count pages/slides in files containing this keyword"
                         )
 
     parser.add_argument('--file',
@@ -914,7 +936,12 @@ if __name__ == "__main__":
                         default=1250000,
                         help="Max dollar value for proposals.  Will print warning if value is exceeded"
                         )
-
+    parser.add_argument('--log-level',
+                        '-l',
+                        type=int,
+                        default=50,
+                        help="log level (0-50) 50 is the default"
+                        )
     args = parser.parse_args()
 
     if not args.file and not args.directory:
@@ -926,10 +953,12 @@ if __name__ == "__main__":
     # then tell them the invocation is incorrect, what a waste of time.
 
     print("Invocation correct, loading standard modules")
-    import pprint
     import time
+    start = time.time()
+    import pprint
     import re
     import math
+    import logging
 
     print("Loading pandas and collections modules")
     import pandas as pd
@@ -947,6 +976,11 @@ if __name__ == "__main__":
 
     print("Done loading modules")
 
+    # Configure the logger
+    logging.basicConfig(level=args.log_level, format='%(message)s')
+    logger = logging.getLogger(__name__)
+    logger.setLevel(args.log_level)
+
     # Pre-compile re expressions
     safety_heading = re.compile("safety.*related.*deliverables")
     some_digits = re.compile('\d{5,}')
@@ -962,4 +996,7 @@ if __name__ == "__main__":
     valid_extensions = ppt_extensions + ["pdf"]
 
     # args is global so no need to pass it
-    main()
+    number_props = main()
+    end = time.time()
+
+    print(f"{number_props} proposals in {round(end-start,2)} seconds")
