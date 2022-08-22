@@ -218,7 +218,7 @@ def parse_safety(seg_i, single_text, text_segs):
     start_number = 0
     result = ""
     low_start = 0
-
+    disclaimer = "Use or disclosure of data contained on this page is subject to the restriction on the first page of this volume"
     # Return immediately if that header isn't present
     if not safety_heading.search(single_text.lower()):
         return {}
@@ -227,11 +227,14 @@ def parse_safety(seg_i, single_text, text_segs):
     # 2.7 Safety Related Deliverables
     for i in range(-2,1):
         try:
-            start_number = float(text_segs[seg_i+i].split()[0].rstrip('.'))
-            low_start = i
+            start_number = re.match("(\d(\.\d)+)", text_segs[seg_i+i].split()[0]) #float(text_segs[seg_i+i].split()[0].rstrip('.'))
+            if start_number:
+                start_number = start_number.group()
+                low_start = i
+                break
         except (ValueError, IndexError) as e:
             pass
-            logger.debug(f"Exception {e}")
+            print(f"Exception {e}")
 
     # Low start <0 means the number was found in a
     # text block BEFORE the key word
@@ -246,20 +249,32 @@ def parse_safety(seg_i, single_text, text_segs):
     # 3. Next section
     # Stop when this next section is found
     # TODO How many lines to get?  4? 10?
-    for i in range(4):
+    print(f"{start_number=}")
+    for i in range(20):
         try:
-            number_str = text_segs[seg_i+i].split()[0].rstrip('.')
-            new_number = float(number_str)
-            delta = math.floor(new_number) - math.floor(start_number)
-            if delta >= 1 or not number_str.startswith(str(start_number)):
-                break
+            if bool(re.search("\d\.|^\d$|Commercialization Strategy", text_segs[seg_i+i].strip())):
+                number_str = text_segs[seg_i+i].split()[0]#.rstrip('.')
+                #new_number = float(number_str)
+                new_number = number_str
+                print(f"{new_number=}")
+                """
+                delta = math.floor(new_number) - math.floor(start_number)
+                if delta >= 1:
+                    logging.debug(f"Safety, found new heading: {new_number=} {start_number=} on line '{text_segs[seg_i+i]}'")
+                    break
+                """
+                if not number_str.startswith(str(start_number)):
+                    print(f"{number_str} doesn't start with {start_number}; breaking")
+                    break
         except ValueError as e:
-            logger.debug("Error", e)
+            print(f"Error: {e=}")
             pass
-        result += text_segs[seg_i+i] + '\n'
-        logger.debug(text_segs[seg_i+i])
+        if disclaimer != text_segs[seg_i+i]:
+            result += text_segs[seg_i+i] + '\n'
+            logger.debug(text_segs[seg_i+i])
 
     if result:
+        print(f"Safety: {result=}")
         return {"Safety-Related Deliverables": result}
 
     return {}
