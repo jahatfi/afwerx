@@ -999,7 +999,7 @@ if __name__ == "__main__":
                         '-l',
                         type=int,
                         default=50,
-                        help="log level (0-50) 50 is the default"
+                        help="log level (0-50)"
                         )
     args = parser.parse_args()
 
