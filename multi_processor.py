@@ -232,9 +232,8 @@ def parse_safety(seg_i, single_text, text_segs):
                 start_number = start_number.group()
                 low_start = i
                 break
-        except (ValueError, IndexError) as e:
+        except IndexError as e:
             pass
-            print(f"Exception {e}")
 
     # Low start <0 means the number was found in a
     # text block BEFORE the key word
@@ -249,14 +248,14 @@ def parse_safety(seg_i, single_text, text_segs):
     # 3. Next section
     # Stop when this next section is found
     # TODO How many lines to get?  4? 10?
-    print(f"{start_number=}")
+    logging.debug(f"{start_number=}")
     for i in range(20):
         try:
             if bool(re.search("\d\.|^\d$|Commercialization Strategy", text_segs[seg_i+i].strip())):
                 number_str = text_segs[seg_i+i].split()[0]#.rstrip('.')
                 #new_number = float(number_str)
                 new_number = number_str
-                print(f"{new_number=}")
+                logger.info(f"{new_number=}")
                 """
                 delta = math.floor(new_number) - math.floor(start_number)
                 if delta >= 1:
@@ -264,7 +263,7 @@ def parse_safety(seg_i, single_text, text_segs):
                     break
                 """
                 if not number_str.startswith(str(start_number)):
-                    print(f"{number_str} doesn't start with {start_number}; breaking")
+                    logger.debug(f"{number_str} doesn't start with {start_number}; breaking")
                     break
         except ValueError as e:
             print(f"Error: {e=}")
@@ -274,7 +273,7 @@ def parse_safety(seg_i, single_text, text_segs):
             logger.debug(text_segs[seg_i+i])
 
     if result:
-        print(f"Safety: {result=}")
+        logger.info(f"Safety: {result=}")
         return {"Safety-Related Deliverables": result}
 
     return {}
@@ -376,6 +375,16 @@ def parse_questions(file_name):
         18: "Is your firm affiliated as set forth in 13 CFR"
     }
 
+    regulatory_questions = [
+        "Does this activity involve air flight (including taxi)?",
+        "Is human subject research involved?",
+        "Does this activity involve animals?",
+        "Does this activity use a directed energy device (including lasers) or radio frequency radiation?",
+        "Does this activity use explosives, propellants, deflagrating materials, or ammunition?",
+        "Does this activity involve hazardous materials?",
+        "Does this activity involve infectious agents & toxins, human-derived materials, or recombinant DNA?"
+    ]
+
     duration = "Proposed Base Duration (in months)"
     prop_cert_questions = None
 
@@ -386,6 +395,7 @@ def parse_questions(file_name):
     type_found = False
     prop_type = False
     last_answer = None
+    past_regulatory_heading = False
     with fitz.open(file_name) as doc:
         for page_i, page in enumerate(doc):
             logger.debug(f"{page_i}".center(80,"-"))
@@ -460,6 +470,36 @@ def parse_questions(file_name):
                     safety_info_found +=1
                     result.update(safety_info)
                     continue
+
+            # Parse the regulatory info
+            # Assume it also oappears
+            if "compliance and regulatory activities" in single_text.lower():
+                past_regulatory_heading = True
+
+            if past_regulatory_heading and regulatory_questions:
+                q_to_delete = set()
+                for question in regulatory_questions:
+                    if question.lower() in single_text.lower():
+                        logger.debug(f"Found reg question: {single_text}")
+                        answer = single_text.split()[-1].lower()
+                        if answer in ["yes", "no"]:
+                            result[f"Regulatory: {question}"] = single_text.split()[-1]
+                            q_to_delete.add(question)
+                        break
+                    else:
+                        partial_q = re.sub("Does this activity", "", question)
+                        if partial_q[:20].lower() in single_text.lower():
+                            single_text += " " + text_segs[seg_i+1]
+                            logger.debug((f"Found partial reg question: {single_text}"))
+                            answer = single_text.split()[-1].lower()
+                            if answer in ["yes", "no"]:
+                                result[f"Regulatory: {question}"] = single_text.split()[-1]
+                                q_to_delete.add(question)
+                                break
+
+                for q in q_to_delete:
+                    logger.debug(f"Removing {q} from list of requlatory questions")
+                    regulatory_questions.remove(q)
 
             if duration and duration.lower() in single_text.lower():
                 result["Duration (Mo.)"] = single_text.split()[-1].strip()
@@ -736,7 +776,7 @@ def parse_file(file_name, prop_number, ocr_flag):
             logger.info(f"Parsing {short_name} for signatures")
             poc_info = process_pdf_sigs_fitz(file_name)
             if poc_info:
-                print(f"Found POC info in {short_name}")
+                logger.info(f"Found POC info in {short_name}")
                 file_info.update(poc_info)
 
         # Count number of pages/slides in the proposal document
@@ -872,9 +912,13 @@ def main():
     # Sort columns in dataframe by name (alphanumerically)
     # results = results[sorted_cols]
     results.index.name = "Proposal ID"
+    # https://btechgeeks.com/python-pandas-how-to-display-full-dataframe-i-e-print-all-rows-columns-without-truncation/
     # Print and save resulting table
-
-    pprint.pprint(results.T)
+    #pd.set_option('display.max_rows', None)
+    #pd.set_option('display.max_columns', None)
+    #pd.set_option('display.width', None)
+    #pd.set_option('display.max_colwidth', -1)
+    pprint.pprint(results)
     results.to_csv(args.out)
     return len(results)
 # ==============================================================================
@@ -887,7 +931,7 @@ if __name__ == "__main__":
     parser.add_argument('--budget-file',
                         '-b',
                         type=str,
-                        default="budget",
+                        default="proposalBudget",
                         help="Will parse files with this keyword as budget documents"
                         )
 
